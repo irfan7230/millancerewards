@@ -34,6 +34,7 @@ const AdminVaults       = React.lazy(() => import('@/pages/admin/AdminVaults'));
 const AdminReports      = React.lazy(() => import('@/pages/admin/AdminReports'));
 const AdminSettings        = React.lazy(() => import('@/pages/admin/AdminSettings'));
 const AdminContentManager  = React.lazy(() => import('@/pages/admin/AdminContentManager'));
+const AdminCoupons         = React.lazy(() => import('@/pages/admin/AdminCoupons'));
 
 // Franchise
 const FranchiseDashboard = React.lazy(() => import('@/pages/franchise/FranchiseDashboard'));
@@ -109,6 +110,7 @@ export function AppRouter() {
             <Route path="reports"         element={<Suspense fallback={<RouteFallback />}><AdminReports /></Suspense>} />
             <Route path="settings"        element={<Suspense fallback={<RouteFallback />}><AdminSettings /></Suspense>} />
             <Route path="content"         element={<Suspense fallback={<RouteFallback />}><AdminContentManager /></Suspense>} />
+            <Route path="coupons"         element={<Suspense fallback={<RouteFallback />}><AdminCoupons /></Suspense>} />
           </Route>
 
           {/* Franchise portal */}

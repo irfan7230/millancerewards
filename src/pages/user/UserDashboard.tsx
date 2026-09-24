@@ -25,32 +25,10 @@ import { useCheckout } from '@/components/payments/CheckoutProvider';
 import { cn, currentPeriodLabel } from '@/lib/utils';
 import type { Payment, Draw, Vault, Plan } from '@/types';
 import { formatCurrency } from '@/lib/utils';
+import { cmsService } from '@/services/cms.service';
+import type { DashboardBanner } from '@/services/cms.service';
 
 // ── Promo banners (uses existing project imagery + real offer copy) ──────────
-const BANNERS = [
-  {
-    image: '/images/stitch/hero_slide1.png',
-    title: '10 Winners Every Month',
-    subtitle: 'Stay paid up to enter this month’s lucky draw.',
-    to: '/user/draws',
-    tint: 'from-brand-600/90 to-brand-500/70',
-  },
-  {
-    image: '/images/stitch/hero_slide3.png',
-    title: 'Your Vault, Your Money',
-    subtitle: '100% of contributions are yours to redeem.',
-    to: '/user/vault',
-    tint: 'from-slate-900/90 to-slate-700/60',
-  },
-  {
-    image: '/images/stitch/hero_slide4.png',
-    title: 'Redeem at Any Millance Store',
-    subtitle: 'Generate a QR voucher and spend your vault balance in store.',
-    to: '/user/redeem',
-    tint: 'from-accent-600/90 to-accent-500/60',
-  },
-];
-
 // ── Quick actions (app-grid) ─────────────────────────────────────────────────
 const QUICK_ACTIONS = [
   { to: '/user/payments', label: 'Pay Now',   icon: CreditCard,  color: 'text-brand-600',   bg: 'bg-brand-50' },
@@ -75,21 +53,24 @@ export default function UserDashboard() {
   const [vault, setVault] = useState<Vault | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
+  const [banners, setBanners] = useState<DashboardBanner[]>([]);
 
   const load = async () => {
     if (!userId) return;
     setLoading(true); setError(null);
     try {
-      const [p, d, v, pl] = await Promise.all([
+      const [p, d, v, pl, b] = await Promise.all([
         paymentService.getUserPayments(userId),
         drawService.getFranchiseDraws(user!.franchiseId!),
         vaultService.getVault(userId),
         user?.planId ? planService.getPlan(user.planId) : Promise.resolve(null),
+        cmsService.getDashboardBanners({ franchiseId: user?.franchiseId, groupId: user?.groupId, planId: user?.planId }),
       ]);
       setPayments(p);
       setDraws(d.filter(dr => dr.status === 'completed'));
       setVault(v);
       setPlan(pl);
+      setBanners(b);
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
     finally { setLoading(false); }
   };
@@ -125,6 +106,7 @@ export default function UserDashboard() {
   const paidCount = payments.filter(p => p.status === 'Paid').length;
   const planPct = plan ? Math.min(100, Math.round((plan.currentMonth / plan.durationMonths) * 100)) : 0;
 
+  if (!banners || banners.length === 0) return null;
   return (
     <div className="space-y-6 max-w-6xl">
       {/* ── Balance header — the "wallet" hero, like a payments app ────────── */}
@@ -164,7 +146,7 @@ export default function UserDashboard() {
       </section>
 
       {/* ── Banner carousel ─────────────────────────────────────────────────── */}
-      <BannerCarousel />
+      <BannerCarousel banners={banners} />
 
       {/* ── Quick actions grid ──────────────────────────────────────────────── */}
       <section>
@@ -284,9 +266,9 @@ export default function UserDashboard() {
 import { CheckCircle2 } from 'lucide-react';
 
 // ── Auto-playing rounded banner carousel ─────────────────────────────────────
-function BannerCarousel() {
+function BannerCarousel({ banners }: { banners: DashboardBanner[] }) {
   const [index, setIndex] = useState(0);
-  const count = BANNERS.length;
+  const count = banners.length;
 
   const next = useCallback(() => setIndex(i => (i + 1) % count), [count]);
 
@@ -304,9 +286,9 @@ function BannerCarousel() {
           className="flex transition-transform duration-500 ease-out"
           style={{ transform: `translateX(-${index * 100}%)` }}
         >
-          {BANNERS.map((b) => (
+          {banners.map((b) => (
             <Link
-              key={b.title}
+              key={b.id}
               to={b.to}
               className="relative shrink-0 w-full h-40 sm:h-56 lg:h-64 block"
             >
@@ -326,7 +308,7 @@ function BannerCarousel() {
 
       {/* Dots */}
       <div className="absolute bottom-3 left-6 sm:left-10 flex items-center gap-1.5 z-20">
-        {BANNERS.map((_, i) => (
+        {banners.map((_, i) => (
           <button
             key={i}
             onClick={() => setIndex(i)}

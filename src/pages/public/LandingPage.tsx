@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { cmsService } from '@/services/cms.service';
-import type { StatItem } from '@/services/cms.service';
+import type { StatCard as CmsStatCard, PrizeCard as CmsPrizeCard, HowStep, HeroSlide } from '@/services/cms.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "Why Millance" stat cards — data-driven so the markup stays DRY.
@@ -79,79 +79,7 @@ const COUNTDOWN_UNITS: { value: string; label: string; live?: boolean }[] = [
 // Luxury prize lineup — data-driven so the grid stays DRY and consistent.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface PrizeCard {
-  rank: string;
-  image: string;
-  alt: string;
-  category: string;
-  categoryColor: string;
-  valueLabel: string;
-  title: string;
-  description: string;
-}
 
-const PRIZE_CARDS: PrizeCard[] = [
-  {
-    rank: 'RANK 1',
-    image: '/images/stitch/hero_iphone.png',
-    alt: 'Apple iPhone 16 Pro + AirPods Max',
-    category: 'Grand Tech Bundle',
-    categoryColor: 'text-fuchsia-600',
-    valueLabel: 'Value: ₹1,79,900',
-    title: 'iPhone 16 Pro & AirPods Max',
-    description: 'Natural Titanium 256GB + Silver AirPods Max over-ear acoustics.',
-  },
-  {
-    rank: 'RANK 2',
-    image: '/images/stitch/ps5.png',
-    alt: 'Sony PlayStation 5 Console',
-    category: 'Next-Gen Gaming',
-    categoryColor: 'text-indigo-600',
-    valueLabel: 'Value: ₹54,990',
-    title: 'Sony PlayStation 5 Slim',
-    description: '1TB SSD Disc Edition with DualSense wireless haptic controller.',
-  },
-  {
-    rank: 'RANK 3',
-    image: '/images/stitch/prize_ipad.jpg',
-    alt: 'Apple iPad Air 11',
-    category: 'Productivity Flagship',
-    categoryColor: 'text-purple-600',
-    valueLabel: 'Value: ₹59,900',
-    title: 'Apple iPad Air 11" M2',
-    description: 'Space Grey 128GB with Wi-Fi 6E & Apple Pencil Pro support.',
-  },
-  {
-    rank: 'RANK 4',
-    image: '/images/stitch/prize_watch.jpg',
-    alt: 'Apple Watch Ultra 2',
-    category: 'Rugged Wearable',
-    categoryColor: 'text-amber-600',
-    valueLabel: 'Value: ₹89,900',
-    title: 'Apple Watch Ultra 2',
-    description: '49mm Titanium case with Black Ocean Band & precision dual-frequency GPS.',
-  },
-  {
-    rank: 'RANK 5',
-    image: '/images/stitch/prize_dyson.jpg',
-    alt: 'Dyson Airwrap',
-    category: 'Luxury Styling',
-    categoryColor: 'text-fuchsia-600',
-    valueLabel: 'Value: ₹49,900',
-    title: 'Dyson Airwrap Multi-Styler',
-    description: 'Complete Long in Strawberry Bronze and Blush Pink with Coanda airflow.',
-  },
-  {
-    rank: 'RANKS 6–10',
-    image: '/images/stitch/prize_voucher.jpg',
-    alt: 'Amazon Rewards Voucher',
-    category: 'Guaranteed Credits',
-    categoryColor: 'text-emerald-600',
-    valueLabel: '5 Winners',
-    title: 'Amazon ₹10,000 Vouchers',
-    description: 'Direct instant voucher credit usable across 100M+ products storewide.',
-  },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Winner testimonials — powers the animated carousel below.
@@ -233,10 +161,18 @@ const WINNER_TESTIMONIALS: WinnerTestimonial[] = [
 
 export default function LandingPage() {
   // ── CMS-driven content (editable via Admin → Content Manager) ──────────────
-  const [cmsStats, setCmsStats] = useState<StatItem[] | null>(null);
+  const [cmsStats, setCmsStats] = useState<CmsStatCard[] | null>(null);
+  const [cmsPrizes, setCmsPrizes] = useState<CmsPrizeCard[] | null>(null);
+  const [cmsHowSteps, setCmsHowSteps] = useState<HowStep[] | null>(null);
+
+  const [cmsHeroSlides, setCmsHeroSlides] = useState<HeroSlide[] | null>(null);
 
   useEffect(() => {
     void cmsService.getStats().then(setCmsStats);
+    void cmsService.getPrizes().then(setCmsPrizes);
+    void cmsService.getHowSteps().then(setCmsHowSteps);
+
+    void cmsService.getHeroSlides().then(setCmsHeroSlides);
   }, []);
 
   // Merge CMS text values onto the existing styled STAT_CARDS (preserves icons/colors)
@@ -255,7 +191,7 @@ export default function LandingPage() {
 
 
 
-      <HeroCarousel />
+      {cmsHeroSlides ? <HeroCarousel slides={cmsHeroSlides} /> : <div className="h-screen bg-slate-50 flex items-center justify-center animate-pulse"><div className="w-16 h-16 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin"></div></div>}
 
 
       {/*
@@ -346,50 +282,19 @@ export default function LandingPage() {
             <div className="hidden lg:block absolute top-10 left-[8%] right-[8%] h-0.5 bg-gradient-to-r from-fuchsia-300 via-purple-300 to-indigo-300 -z-0"></div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-8 relative z-10">
-
-              <div className="flex flex-col items-center text-center group">
-                <div className="w-20 h-20 rounded-2xl bg-white border-2 border-indigo-500/20 shadow-md flex items-center justify-center mb-5 group-hover:scale-110 group-hover:border-indigo-500 transition-all">
-                  <span className="font-mono text-xl font-extrabold text-indigo-600">01</span>
-                </div>
-                <h3 className="font-bold text-slate-900 text-lg mb-2">Join a Plan</h3>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-[210px]">Select Group A (₹1,000/mo) or Group B (₹2,000/mo) based on prize tiers.</p>
-              </div>
-
-
-              <div className="flex flex-col items-center text-center group">
-                <div className="w-20 h-20 rounded-2xl bg-white border-2 border-fuchsia-500/20 shadow-md flex items-center justify-center mb-5 group-hover:scale-110 group-hover:border-fuchsia-500 transition-all">
-                  <span className="font-mono text-xl font-extrabold text-fuchsia-600">02</span>
-                </div>
-                <h3 className="font-bold text-slate-900 text-lg mb-2">Pay Monthly</h3>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-[210px]">Automate payment securely via UPI, NetBanking, or card before the 25th.</p>
-              </div>
-
-
-              <div className="flex flex-col items-center text-center group">
-                <div className="w-20 h-20 rounded-2xl bg-white border-2 border-purple-500/20 shadow-md flex items-center justify-center mb-5 group-hover:scale-110 group-hover:border-purple-500 transition-all">
-                  <span className="font-mono text-xl font-extrabold text-purple-600">03</span>
-                </div>
-                <h3 className="font-bold text-slate-900 text-lg mb-2">Build Your Vault</h3>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-[210px]">100% of your deposits accumulate in your personal, segregated vault wallet.</p>
-              </div>
-
-
-              <div className="flex flex-col items-center text-center group">
-                <div className="w-20 h-20 rounded-2xl bg-white border-2 border-amber-500/20 shadow-md flex items-center justify-center mb-5 group-hover:scale-110 group-hover:border-amber-500 transition-all">
-                  <span className="font-mono text-xl font-extrabold text-amber-600">04</span>
-                </div>
-                <h3 className="font-bold text-slate-900 text-lg mb-2">Enter the Draw</h3>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-[210px]">Auto-entry on the 28th of every month for 10 verified premium tech prizes.</p>
-              </div>
-
-
-              <div className="flex flex-col items-center text-center group">
-                <div className="w-20 h-20 rounded-2xl bg-white border-2 border-emerald-500/20 shadow-md flex items-center justify-center mb-5 group-hover:scale-110 group-hover:border-emerald-500 transition-all">
-                  <span className="font-mono text-xl font-extrabold text-emerald-600">05</span>
-                </div>
-                <h3 className="font-bold text-slate-900 text-lg mb-2">Win or Redeem</h3>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-[210px]">Receive prize courier or redeem your accrued balance for catalog items.</p>
-              </div>
+              {(cmsHowSteps || []).map((step, i) => {
+                const colors = ['indigo', 'fuchsia', 'purple', 'amber', 'emerald'];
+                const c = colors[i % colors.length];
+                return (
+                  <div key={step.id} className="flex flex-col items-center text-center group">
+                    <div className={`w-20 h-20 rounded-2xl bg-white border-2 border-${c}-500/20 shadow-md flex items-center justify-center mb-5 group-hover:scale-110 group-hover:border-${c}-500 transition-all`}>
+                      <span className={`font-mono text-xl font-extrabold text-${c}-600`}>{step.number}</span>
+                    </div>
+                    <h3 className="font-bold text-slate-900 text-lg mb-2">{step.title}</h3>
+                    <p className="text-xs text-slate-600 leading-relaxed max-w-[210px]">{step.description}</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -633,22 +538,25 @@ export default function LandingPage() {
               Card internals scale down on mobile so text stays readable in the
               narrower 2-up layout. Data-driven from PRIZE_CARDS. */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 lg:gap-8">
-            {PRIZE_CARDS.map((prize) => (
-              <div key={prize.rank} className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 border border-slate-200/80 card-hover group">
-                <div className="relative aspect-square rounded-xl sm:rounded-2xl overflow-hidden bg-slate-50 mb-3 sm:mb-5">
-                  <span className="absolute top-2 left-2 sm:top-3 sm:left-3 z-10 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[9px] sm:text-xs font-extrabold bg-slate-900 text-white font-mono">
-                    {prize.rank}
-                  </span>
-                  <img src={prize.image} alt={prize.alt} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+            {(cmsPrizes ?? []).map((prize, i) => {
+              const catColors = ['text-fuchsia-600','text-indigo-600','text-purple-600','text-amber-600','text-emerald-600'];
+              return (
+                <div key={prize.id || prize.rank} className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 border border-slate-200/80 card-hover group">
+                  <div className="relative aspect-square rounded-xl sm:rounded-2xl overflow-hidden bg-slate-50 mb-3 sm:mb-5">
+                    <span className="absolute top-2 left-2 sm:top-3 sm:left-3 z-10 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[9px] sm:text-xs font-extrabold bg-slate-900 text-white font-mono">
+                      {prize.rank}
+                    </span>
+                    <img src={prize.image} alt={prize.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  </div>
+                  <div className={cn('flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] sm:text-xs font-bold mb-1', catColors[i % catColors.length])}>
+                    <span>{prize.category}</span>
+                    <span className="font-mono text-slate-500">{prize.valueLabel}</span>
+                  </div>
+                  <h3 className="text-sm sm:text-lg font-extrabold text-slate-900 leading-snug">{prize.title}</h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2 sm:line-clamp-none">{prize.description}</p>
                 </div>
-                <div className={cn('flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] sm:text-xs font-bold mb-1', prize.categoryColor)}>
-                  <span>{prize.category}</span>
-                  <span className="font-mono text-slate-500">{prize.valueLabel}</span>
-                </div>
-                <h3 className="text-sm sm:text-lg font-extrabold text-slate-900 leading-snug">{prize.title}</h3>
-                <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2 sm:line-clamp-none">{prize.description}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -911,93 +819,10 @@ function FAQItem({ faq }: { faq: typeof FAQS[0] }) {
 // Hero Carousel — data + component
 // ─────────────────────────────────────────────────────────────────────────────
 
-const HERO_SLIDES = [
-  {
-    badge: 'Monthly Lucky Draw',
-    headline: '10 Exciting Prizes',
-    subheadline: 'Every Month!',
-    tagline: '10 Winners · 10 Winning Moments',
-    description:
-      'Every month, 10 lucky winners are selected through a fair and random draw. Stay active and keep your dreams alive!',
-    cta: 'Join Now',
-    ctaHref: '#groups',
-    ctaAlt: 'View Prizes',
-    ctaAltHref: '#prizes',
-    image: '/images/stitch/hero_slide1.png',
-    g1: '#7c3aed',
-    g2: '#4f46e5',
-    stats: [
-      { label: '10 Winners', sub: 'Per Month' },
-      { label: '10 Prizes', sub: 'Every Month' },
-      { label: 'Random', sub: 'Fair Selection' },
-    ],
-  },
-  {
-    badge: 'Small Step · Big Rewards',
-    headline: 'Monthly ₹1,000',
-    subheadline: 'Big Dreams Await!',
-    tagline: 'Your Luck, Our Happiness',
-    description:
-      'Join Millance Lucky Draw and get a chance to win amazing prizes every month. 100% Transparent and Trusted.',
-    cta: 'Join Now',
-    ctaHref: '#groups',
-    ctaAlt: 'Watch Video',
-    ctaAltHref: '#how-it-works',
-    image: '/images/stitch/hero_slide2.png',
-    g1: '#9333ea',
-    g2: '#db2777',
-    stats: [
-      { label: '₹1,000', sub: 'Monthly Membership' },
-      { label: '5th Every Month', sub: 'Mark Your Calendar' },
-      { label: '5:30 PM', sub: 'Draw Time' },
-    ],
-  },
-  {
-    badge: 'Small Payment · Big Opportunity',
-    headline: 'Pay ₹1,000',
-    subheadline: 'Every Month',
-    tagline: 'Small Payments Today, Bigger Rewards Tomorrow!',
-    description:
-      'Pay ₹1,000 every month for 11 months to stay active and eligible for the Lucky Draw. Win and exit early!',
-    cta: 'Join Now',
-    ctaHref: '#groups',
-    ctaAlt: 'Watch Video',
-    ctaAltHref: '#how-it-works',
-    image: '/images/stitch/hero_slide3.png',
-    g1: '#f97316',
-    g2: '#e11d48',
-    stats: [
-      { label: 'Monthly Payment', sub: '₹1,000' },
-      { label: 'Payment Duration', sub: '11 Months' },
-      { label: 'Stay Active', sub: '& Win Draw' },
-    ],
-  },
-  {
-    badge: 'Small Step · Big Rewards',
-    headline: 'Monthly ₹1,000',
-    subheadline: 'Big Dreams Await!',
-    tagline: 'More Than a Draw — A Better Tomorrow',
-    description:
-      'Join Millance Lucky Draw and get a chance to win amazing prizes every month. A brighter tomorrow is just ₹1,000 away!',
-    cta: 'Join Now',
-    ctaHref: '#groups',
-    ctaAlt: 'How It Works',
-    ctaAltHref: '#how-it-works',
-    image: '/images/stitch/hero_slide4.png',
-    g1: '#10b981',
-    g2: '#0d9488',
-    stats: [
-      { label: 'Exciting Prizes', sub: 'Premium Rewards' },
-      { label: 'Real Winners', sub: 'Every Month' },
-      { label: '100% Fair', sub: 'Transparent' },
-    ],
-  },
-];
-
-function HeroCarousel() {
+function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const [current, setCurrent] = useState(0);
   const [fading, setFading] = useState(false);
-  const total = HERO_SLIDES.length;
+  const total = slides.length;
 
   const goTo = useCallback(
     (idx: number) => {
@@ -1019,7 +844,7 @@ function HeroCarousel() {
     return () => clearInterval(t);
   }, [next]);
 
-  const s = HERO_SLIDES[current];
+  const s = slides[current];
 
   const gradStyle = {
     background: `linear-gradient(135deg, ${s.g1}, ${s.g2})`,
@@ -1227,7 +1052,7 @@ function HeroCarousel() {
 
           {/* Dot indicators */}
           <div className="flex items-center gap-2.5">
-            {HERO_SLIDES.map((slide, idx) => (
+            {slides.map((slide, idx) => (
               <button
                 key={idx}
                 onClick={() => goTo(idx)}

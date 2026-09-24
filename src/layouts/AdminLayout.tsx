@@ -24,6 +24,7 @@ import {
   Menu,
   X,
   Sparkles,
+  Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -83,6 +84,12 @@ const NAV_ITEMS = [
     to: '/admin/vaults',
     label: 'Vaults',
     icon: Wallet,
+    group: 'Finance',
+  },
+  {
+    to: '/admin/coupons',
+    label: 'Coupons & Offers',
+    icon: Tag,
     group: 'Finance',
   },
   {
