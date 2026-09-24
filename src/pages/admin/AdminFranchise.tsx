@@ -3,7 +3,7 @@
 // Members. Admin can edit the franchise, suspend/activate, and drill into its
 // plans/groups with the members attached to each. Fully responsive.
 // =============================================================================
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, MapPin, Calendar, Pencil, Users, Layers, FileText,

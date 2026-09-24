@@ -1,7 +1,7 @@
 // =============================================================================
 // Franchise Dashboard — the primary management view
 // =============================================================================
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Trophy, CreditCard, Wallet, AlertTriangle, Plus, Layers } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -13,15 +13,14 @@ import { userService } from '@/services/user.service';
 import { paymentService } from '@/services/payment.service';
 import { vaultService } from '@/services/vault.service';
 import { useAuthStore } from '@/stores/authStore';
-import { useDemoClockStore } from '@/stores/demoClockStore';
 import type { FranchiseUser, Payment, Vault } from '@/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, currentPeriodLabel, formatDate } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function FranchiseDashboard() {
+  const period = currentPeriodLabel();
   const { user } = useAuthStore();
-  const { clock } = useDemoClockStore();
-  const franchiseId = user?.franchiseId ?? '';
+    const franchiseId = user?.franchiseId ?? '';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +51,7 @@ export default function FranchiseDashboard() {
   const activeUsers = users.filter(u => !['INACTIVE'].includes(u.status));
   const winners = users.filter(u => u.hasWon);
   const totalVault = vaults.reduce((s, v) => s + v.balance, 0);
-  const currentMonthPayments = payments.filter(p => p.periodLabel === clock.currentPeriodLabel);
+  const currentMonthPayments = payments.filter(p => p.periodLabel === period);
   const paidThisMonth = currentMonthPayments.filter(p => p.status === 'Paid').length;
   const pendingThisMonth = currentMonthPayments.filter(p => p.status === 'Pending').length;
 
@@ -78,7 +77,7 @@ export default function FranchiseDashboard() {
           Franchise Dashboard
         </h1>
         <p className="mt-1 text-sm text-neutral-500 sm:text-[15px]">
-          {clock.currentPeriodLabel}
+          {period}
           <span className="mx-1.5 text-neutral-300">·</span>
           {user?.name}
         </p>

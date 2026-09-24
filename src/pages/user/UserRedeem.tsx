@@ -4,7 +4,7 @@
 // Millance store by presenting this ticket-style voucher to the cashier.
 // The QR is rendered locally as an SVG matrix (no external dependency).
 // =============================================================================
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   QrCode, Wallet, Store, ShieldCheck, Copy, Check, RefreshCw, Sparkles,
 } from 'lucide-react';

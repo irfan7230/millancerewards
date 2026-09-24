@@ -6,7 +6,7 @@
 // Flow: open() → checkout modal → on simulated success → run caller's onSuccess
 // → auto-open the LuckyDrawWheel (blurred backdrop + auto-spin + celebration).
 // =============================================================================
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState, useRef } from 'react';
 import { RazorpayCheckout, type CheckoutDetails } from './RazorpayCheckout';
 import { LuckyDrawWheel } from './LuckyDrawWheel';
 import { prizeService } from '@/services/prize.service';
@@ -45,11 +45,14 @@ export function CheckoutProvider({ children }: { children: React.ReactNode }) {
 
   const closeCheckout = useCallback(() => setIsOpen(false), []);
 
+  const timeoutRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timeoutRef.current), []);
+
   const handleSuccess = useCallback(() => {
     // Commit the caller's payment side-effects, then celebrate with the wheel.
     void args?.onSuccess();
     // Small delay so the checkout success screen finishes before the wheel opens.
-    window.setTimeout(() => setWheelOpen(true), 350);
+    timeoutRef.current = window.setTimeout(() => setWheelOpen(true), 350);
   }, [args]);
 
   return (

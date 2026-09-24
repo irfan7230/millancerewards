@@ -1,5 +1,5 @@
 // Admin Draws
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Trophy } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { DrawStatusBadge } from '@/components/ui/Badge';

@@ -10,7 +10,7 @@
 // <Pagination /> renders a responsive, accessible control bar (Prev/Next +
 // numbered pages with ellipses) plus a "showing X–Y of N" summary.
 // =============================================================================
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

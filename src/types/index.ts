@@ -235,7 +235,7 @@ export interface DrawBlockedResult {
   status: 'blocked';
   reason: 'insufficient_participants' | 'already_completed' | 'insufficient_prizes';
   eligibleCount: number;
-  requiredCount: 10;
+  requiredCount: number;
 }
 
 /** Returned when a draw completes successfully */
@@ -339,15 +339,8 @@ export interface ActivityLogEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Demo Clock
-// ---------------------------------------------------------------------------
 
-export interface DemoClock {
-  /** ISO date string representing the current simulated date */
-  currentDate: string;
-  /** Human-readable label e.g. "October 2026" */
-  currentPeriodLabel: string;
-}
+
 
 // ---------------------------------------------------------------------------
 // Platform Settings — admin-configurable, persisted platform configuration.
@@ -369,6 +362,7 @@ export interface PlatformSettings {
   winnersPerDraw: number;
   drawDayOfMonth: number; // 1..28
   paymentDueDayOfMonth: number; // 1..28
+  voucherValidHours: number;
 
   // Notification channels (platform-level toggles)
   notifyEmail: boolean;

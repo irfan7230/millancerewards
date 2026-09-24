@@ -6,8 +6,9 @@
 // =============================================================================
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Settings as SettingsIcon, Building2, Trophy, Bell, ShieldCheck, FlaskConical,
-  Save, RotateCcw, AlertTriangle, Info, Clock, RefreshCw,
+  Settings as SettingsIcon, Building2, Trophy, Bell, ShieldCheck,
+  Save, RotateCcw, Info,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -16,8 +17,6 @@ import { Toggle } from '@/components/ui/Toggle';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/States';
 import { settingsService } from '@/services/settings.service';
-import { resetDemoData } from '@/services/bootstrap.service';
-import { useDemoClockStore } from '@/stores/demoClockStore';
 import { useToast } from '@/stores/uiStore';
 import type { PlatformSettings } from '@/types';
 import { cn, formatDateTime } from '@/lib/utils';
@@ -29,14 +28,12 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'draws',         label: 'Draw Rules',    icon: Trophy },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'security',      label: 'Security',      icon: ShieldCheck },
-  { id: 'system',        label: 'Demo & System', icon: FlaskConical },
 ];
 
 const TIMEZONES = ['Asia/Kolkata', 'Asia/Dubai', 'Asia/Singapore', 'UTC'];
 
 export default function AdminSettings() {
   const toast = useToast();
-  const { clock, advancing, advanceMonth } = useDemoClockStore();
 
   const [tab, setTab] = useState<TabId>('general');
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
@@ -227,81 +224,12 @@ export default function AdminSettings() {
             </Card>
           )}
 
-          {tab === 'system' && (
-            <div className="space-y-6">
-              {/* Demo controls */}
-              <Card>
-                <CardHeader><CardTitle>Demo Controls</CardTitle></CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="rounded-xl bg-warning-50 border border-warning-200 p-3 flex gap-2">
-                    <FlaskConical className="h-4 w-4 shrink-0 mt-0.5 text-warning-600" />
-                    <p className="text-xs text-warning-700">Simulation tools only — not production actions. In production these run server-side with authorization.</p>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-neutral-200">
-                    <div className="flex items-start gap-2 min-w-0">
-                      <Clock className="h-4 w-4 text-neutral-400 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-sm font-semibold text-neutral-800">Advance Month</p>
-                        <p className="text-xs text-neutral-500">Move the simulated clock forward. Current period: <span className="font-medium text-brand-600">{clock.currentPeriodLabel}</span></p>
-                      </div>
-                    </div>
-                    <Button variant="secondary" size="sm" loading={advancing} onClick={() => advanceMonth()} leftIcon={<RefreshCw className="h-3.5 w-3.5" />} className="shrink-0">
-                      Advance Month
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-danger-200 bg-danger-50/40">
-                    <div className="flex items-start gap-2 min-w-0">
-                      <AlertTriangle className="h-4 w-4 text-danger-500 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-sm font-semibold text-neutral-800">Reset Demo Data</p>
-                        <p className="text-xs text-neutral-500">Restore all seed data to initial state. All demo activity will be lost and the page reloads.</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="destructive" size="sm" className="shrink-0"
-                      onClick={() => { if (window.confirm('Reset ALL demo data? This will reload the page.')) resetDemoData(); }}
-                    >
-                      Reset Data
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Platform info */}
-              <Card>
-                <CardHeader><CardTitle>Platform Information</CardTitle></CardHeader>
-                <CardContent>
-                  <dl className="space-y-3">
-                    {[
-                      { label: 'Version', value: 'Millance v1.0.0 (prototype)' },
-                      { label: 'Stack', value: 'React 19 · TypeScript · Vite · Zustand · TanStack Query' },
-                      { label: 'Styling', value: 'Tailwind CSS v4 · Framer Motion · Recharts' },
-                      { label: 'State', value: 'localStorage via persistence adapter (no backend)' },
-                      { label: 'Auth', value: 'Mock — frontend role guard (see FUTURE-BACKEND-INTEGRATION.md)' },
-                      { label: 'Draw Engine', value: 'Mulberry32 PRNG (deterministic) + crypto (live draws)' },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="flex flex-col sm:flex-row gap-0.5 sm:gap-3">
-                        <dt className="text-xs font-semibold text-neutral-500 sm:w-28 shrink-0">{label}</dt>
-                        <dd className="text-xs text-neutral-700 font-mono break-words">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Restore defaults (config tabs only) */}
-          {tab !== 'system' && (
-            <button
-              onClick={restoreDefaults}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-600"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Restore defaults
-            </button>
-          )}
+          <button
+            onClick={restoreDefaults}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-600"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Restore defaults
+          </button>
         </div>
       </div>
 

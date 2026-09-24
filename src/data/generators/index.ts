@@ -22,7 +22,7 @@ const rng = createPRNG(FIXED_SEED);
 // Simulated "today" — the demo clock starts here
 export const DEMO_START_DATE = '2026-04-01T00:00:00.000Z';
 // We seed 6 months of history (months 1–6 are "in the past")
-export const ELAPSED_MONTHS = 6;
+const ELAPSED_MONTHS = 6;
 
 // ---------------------------------------------------------------------------
 // Group Types (configuration — not hardcoded in UI)
@@ -56,7 +56,7 @@ const FRANCHISE_DATA = [
   { name: 'Millance Pune',      ownerName: 'Anita Deshmukh',   city: 'Pune',      email: 'pune@millance.in',      phone: '9876543215' },
 ];
 
-export function generateFranchises(): Franchise[] {
+function generateFranchises(): Franchise[] {
   const createdAt = '2025-01-15T08:00:00.000Z';
   return FRANCHISE_DATA.map((d, i) => ({
     id: makeId('fran', i + 1),
@@ -74,7 +74,7 @@ export function generateFranchises(): Franchise[] {
 // Groups (2 per franchise = 12 total, mix of A and B)
 // ---------------------------------------------------------------------------
 
-export function generateGroups(franchises: Franchise[]): Group[] {
+function generateGroups(franchises: Franchise[]): Group[] {
   const groups: Group[] = [];
   let idx = 1;
   for (const franchise of franchises) {
@@ -122,7 +122,7 @@ const PLAN_CONFIGS = [
   { name: 'Platinum 36', durationMonths: 36, monthlyAmount: 3000 },
 ];
 
-export function generatePlans(groups: Group[]): Plan[] {
+function generatePlans(groups: Group[]): Plan[] {
   const plans: Plan[] = [];
   let idx = 1;
   for (const group of groups) {
@@ -181,7 +181,7 @@ const STATUS_POOL: UserStatus[] = [
   'PLAN_COMPLETED',
 ];
 
-export function generateUsers(plans: Plan[]): FranchiseUser[] {
+function generateUsers(plans: Plan[]): FranchiseUser[] {
   const users: FranchiseUser[] = [];
   let idx = 1;
   // Aim for 100+ users. Distribute: plans with group-a get 20, group-b get 25.
@@ -214,7 +214,7 @@ export function generateUsers(plans: Plan[]): FranchiseUser[] {
 // Payments (ELAPSED_MONTHS months per user)
 // ---------------------------------------------------------------------------
 
-export function generatePayments(users: FranchiseUser[], plans: Plan[]): Payment[] {
+function generatePayments(users: FranchiseUser[], plans: Plan[]): Payment[] {
   const payments: Payment[] = [];
   let idx = 1;
   const planMap = new Map(plans.map(p => [p.id, p]));
@@ -276,7 +276,7 @@ export function generatePayments(users: FranchiseUser[], plans: Plan[]): Payment
 // Vaults (derived from payments; winners zero'd out)
 // ---------------------------------------------------------------------------
 
-export function generateVaults(
+function generateVaults(
   users: FranchiseUser[],
   payments: Payment[],
 ): Vault[] {
@@ -376,7 +376,7 @@ const PRIZE_TEMPLATES = [
   { name: 'PlayStation 5 Pro',   description: '2TB, DualSense Edge Controller',         value: 74990  },
 ];
 
-export function generatePrizes(franchises: Franchise[]): Prize[] {
+function generatePrizes(franchises: Franchise[]): Prize[] {
   const prizes: Prize[] = [];
   let idx = 1;
   for (const franchise of franchises) {
@@ -398,7 +398,7 @@ export function generatePrizes(franchises: Franchise[]): Prize[] {
 // Draws (past months; at least one upcoming)
 // ---------------------------------------------------------------------------
 
-export function generateDraws(
+function generateDraws(
   plans: Plan[],
   users: FranchiseUser[],
   prizes: Prize[],
@@ -493,7 +493,7 @@ export function generateDraws(
 // Products (global catalog, 10–20)
 // ---------------------------------------------------------------------------
 
-export const PRODUCTS_DATA = [
+const PRODUCTS_DATA = [
   { name: 'Wireless Earbuds Pro',      description: 'ANC, 30hr battery, IPX5',        price: 4999,  category: 'Electronics', inStock: true  },
   { name: 'Stainless Steel Water Bottle', description: '1L, vacuum insulated',        price: 799,   category: 'Lifestyle',   inStock: true  },
   { name: 'Premium Yoga Mat',           description: '6mm thick, non-slip, eco cork', price: 1499,  category: 'Fitness',     inStock: true  },
@@ -511,7 +511,7 @@ export const PRODUCTS_DATA = [
   { name: 'Instant Pot Duo',            description: '5L multi-cooker 9-in-1',        price: 6999,  category: 'Home',        inStock: true  },
 ];
 
-export function generateProducts(): Product[] {
+function generateProducts(): Product[] {
   return PRODUCTS_DATA.map((d, i) => ({
     id: makeId('prd', i + 1),
     name: d.name,
@@ -526,7 +526,7 @@ export function generateProducts(): Product[] {
 // Notifications (realistic backlog)
 // ---------------------------------------------------------------------------
 
-export function generateNotifications(
+function generateNotifications(
   draws: Draw[],
   users: FranchiseUser[],
   payments: Payment[],
@@ -611,7 +611,7 @@ export function generateNotifications(
 // Activity Log
 // ---------------------------------------------------------------------------
 
-export function generateActivityLog(
+function generateActivityLog(
   draws: Draw[],
   users: FranchiseUser[],
   payments: Payment[],

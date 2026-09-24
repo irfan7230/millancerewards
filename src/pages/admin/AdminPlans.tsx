@@ -3,7 +3,7 @@
 // Search (plan name) + franchise + status filters. Collapsible franchise
 // sections; mobile cards, desktop tables.
 // =============================================================================
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';

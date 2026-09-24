@@ -1,5 +1,5 @@
 // Admin Payments — cross-tenant
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CreditCard } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { PaymentStatusBadge } from '@/components/ui/Badge';

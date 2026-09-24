@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { cmsService } from '@/services/cms.service';
+import type { StatItem } from '@/services/cms.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "Why Millance" stat cards — data-driven so the markup stays DRY.
@@ -230,6 +232,21 @@ const WINNER_TESTIMONIALS: WinnerTestimonial[] = [
 ];
 
 export default function LandingPage() {
+  // ── CMS-driven content (editable via Admin → Content Manager) ──────────────
+  const [cmsStats, setCmsStats] = useState<StatItem[] | null>(null);
+
+  useEffect(() => {
+    void cmsService.getStats().then(setCmsStats);
+  }, []);
+
+  // Merge CMS text values onto the existing styled STAT_CARDS (preserves icons/colors)
+  const mergedStats = STAT_CARDS.map((card, i) => ({
+    ...card,
+    value: cmsStats?.[i]?.value ?? card.value,
+    label: cmsStats?.[i]?.label ?? card.label,
+    detail: cmsStats?.[i]?.detail ?? card.detail,
+  }));
+
   return (
     <div className="bg-[#F8FAFC] text-[#0F172A] font-sans antialiased overflow-x-hidden selection:bg-fuchsia-500 selection:text-white">
 
@@ -267,7 +284,7 @@ export default function LandingPage() {
 
           {/* Cards */}
           <ul className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-            {STAT_CARDS.map((card) => (
+            {mergedStats.map((card) => (
               <li
                 key={card.label}
                 className="group relative bg-white rounded-2xl border border-slate-200 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-300 hover:shadow-[0_12px_28px_-8px_rgba(15,23,42,0.12)] hover:-translate-y-1 transition-all duration-300 overflow-hidden"

@@ -16,6 +16,7 @@ interface AuthState {
 interface AuthActions {
   login: (role: Role, credentials: { email: string; password?: string }) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (patch: Partial<AuthUser>) => void;
   initSession: () => Promise<void>;
 }
 
@@ -43,6 +44,10 @@ export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
       throw e;
     }
   },
+
+  updateUser: (patch) => set((state) => ({
+    user: state.user ? { ...state.user, ...patch } : null
+  })),
 
   logout: async () => {
     await authService.logout();

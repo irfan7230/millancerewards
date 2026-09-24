@@ -3,7 +3,7 @@
 // Search (name/email/franchise) + franchise + status filters. Each franchise is
 // a collapsible section (FranchiseSection). Mobile cards, desktop tables.
 // =============================================================================
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Users, UserRound } from 'lucide-react';
 import { UserStatusBadge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';

@@ -1,7 +1,7 @@
 // =============================================================================
 // AdminPrizes — platform-wide prize management
 // =============================================================================
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Gift, Plus, Search, Sparkles, Building2 } from 'lucide-react';
 import { MotionCard } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';

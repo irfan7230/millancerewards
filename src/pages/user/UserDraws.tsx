@@ -1,7 +1,7 @@
 // =============================================================================
 // User Draws — Draw history and win tracking
 // =============================================================================
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Trophy, ShieldCheck, Sparkles } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { SkeletonTable } from '@/components/ui/Skeleton';

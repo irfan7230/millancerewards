@@ -1,7 +1,6 @@
 // =============================================================================
 // Toast — notification primitive
 // =============================================================================
-import React from 'react';
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore, type Toast } from '@/stores/uiStore';
@@ -29,7 +28,7 @@ const ICON_COLORS: Record<Toast['variant'], string> = {
 };
 
 function ToastItem({ toast }: { toast: Toast }) {
-  const removeToast = useUIStore((s: any) => s.removeToast);
+  const removeToast = useUIStore(s => s.removeToast);
   const Icon = ICONS[toast.variant];
 
   return (
@@ -64,7 +63,7 @@ function ToastItem({ toast }: { toast: Toast }) {
 }
 
 export function ToastContainer() {
-  const toasts = useUIStore((s: any) => s.toasts);
+  const toasts = useUIStore(s => s.toasts);
 
   return (
     <div
@@ -72,7 +71,7 @@ export function ToastContainer() {
       className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
     >
       <AnimatePresence mode="popLayout">
-        {toasts.map((toast: any) => (
+        {toasts.map(toast => (
           <div key={toast.id} className="pointer-events-auto">
             <ToastItem toast={toast} />
           </div>

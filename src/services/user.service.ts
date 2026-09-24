@@ -53,7 +53,7 @@ export const userService = {
     const all = getAll();
     // Capacity check happens in the store/service layer
     const newUser: FranchiseUser = {
-      id: `usr-${Date.now()}`,
+      id: `usr-${crypto.randomUUID()}`,
       ...input,
       status: 'ACTIVE',
       joinedAt: new Date().toISOString(),

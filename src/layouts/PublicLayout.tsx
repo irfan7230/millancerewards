@@ -1,11 +1,10 @@
 // =============================================================================
 // PublicLayout — wraps the landing page and /login
 // =============================================================================
-import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
+
 import { cn } from '@/lib/utils';
 
 export function PublicLayout() {
@@ -233,4 +232,3 @@ function PublicFooter() {
 }
 
 // Keep cn import visible (used indirectly via className props)
-export { cn };

@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Trophy, Sparkles } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 import type { Prize } from '@/types';
@@ -68,7 +68,7 @@ function useSpin(segmentCount: number) {
     setSpinning(true);
     // Set the CSS transition target on the next frame.
     requestAnimationFrame(() => setRotation(target));
-    window.setTimeout(() => { setSpinning(false); onDone(); }, durationMs);
+    return window.setTimeout(() => { setSpinning(false); onDone(); }, durationMs);
   };
 
   const reset = () => { setSpinning(false); setRotation(0); };
@@ -92,6 +92,8 @@ export function LuckyDrawWheel({ open, prizes, onClose }: Props) {
   // Open/close the native dialog + auto-start the spin.
   useEffect(() => {
     const d = dialogRef.current;
+    let spinTimeout: number;
+    let initialTimeout: number;
     if (!d) return;
     if (open) {
       if (!d.open) d.showModal();
@@ -100,12 +102,15 @@ export function LuckyDrawWheel({ open, prizes, onClose }: Props) {
       setPhase('idle');
       setWinIndex(null);
       const idx = pickWinningIndex(segments.length);
-      const t = window.setTimeout(() => {
+      initialTimeout = window.setTimeout(() => {
         setPhase('spinning');
         setWinIndex(idx);
-        spinTo(idx, SPIN_MS, () => setPhase('revealed'));
+        spinTimeout = spinTo(idx, SPIN_MS, () => setPhase('revealed'));
       }, 650);
-      return () => window.clearTimeout(t);
+      return () => {
+        window.clearTimeout(initialTimeout);
+        if (spinTimeout) window.clearTimeout(spinTimeout);
+      };
     } else if (d.open) {
       d.close();
     }

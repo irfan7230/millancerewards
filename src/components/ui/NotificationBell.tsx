@@ -143,16 +143,21 @@ export function NotificationBell({
   }, [audience, userId, franchiseId]);
 
   // ===========================================================================
-  // Initial + periodic refresh
+  // Initial load
   // ===========================================================================
 
   useEffect(() => {
     void load();
+  }, [load]);
 
+  // ===========================================================================
+  // Periodic refresh (only when closed)
+  // ===========================================================================
+
+  useEffect(() => {
+    if (open) return; // Do not poll when open; we fetch on open instead.
     const t = window.setInterval(() => {
-      if (!open) {
-        void load();
-      }
+      void load();
     }, 15_000);
 
     return () => window.clearInterval(t);

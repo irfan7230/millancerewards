@@ -36,7 +36,7 @@ export const franchiseService = {
     await delay(400);
     const all = getAll();
     const newFranchise: Franchise = {
-      id: `fran-${Date.now()}`,
+      id: `fran-${crypto.randomUUID()}`,
       ...input,
       status: 'active',
       createdAt: new Date().toISOString(),

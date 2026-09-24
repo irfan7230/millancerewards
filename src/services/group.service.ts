@@ -35,11 +35,12 @@ export const groupService = {
     const groupType = GROUP_TYPES.find(t => t.id === input.groupTypeId);
     if (!groupType) throw new Error(`GroupType ${input.groupTypeId} not found`);
     const existing = all.filter(g => g.franchiseId === input.franchiseId && g.groupTypeId === input.groupTypeId);
-    if (existing.length > 0 && existing[0].memberCount >= groupType.capacity) {
-      throw new Error(`Group ${groupType.name} is at full capacity (${groupType.capacity})`);
+    const totalMembers = existing.reduce((sum, g) => sum + g.memberCount, 0);
+    if (totalMembers >= groupType.capacity) {
+      throw new Error(`Franchise has reached full capacity (${groupType.capacity}) for ${groupType.name}`);
     }
     const newGroup: Group = {
-      id: `grp-${Date.now()}`,
+      id: `grp-${crypto.randomUUID()}`,
       franchiseId: input.franchiseId,
       groupTypeId: input.groupTypeId,
       name: input.name,

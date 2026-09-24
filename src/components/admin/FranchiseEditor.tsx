@@ -5,7 +5,7 @@
 // Emits the created/updated franchise via onSaved so parents update reactively.
 // Business logic stays in the service; this component only handles the form.
 // =============================================================================
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';

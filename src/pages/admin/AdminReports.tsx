@@ -22,6 +22,7 @@ import { userService } from '@/services/user.service';
 import { drawService } from '@/services/draw.service';
 import { paymentService } from '@/services/payment.service';
 import { vaultService } from '@/services/vault.service';
+import type { Payment } from '@/types';
 
 import {
   BarChart,
@@ -65,7 +66,7 @@ interface ReportsData {
   franchises: unknown[];
   users: unknown[];
   draws: unknown[];
-  payments: any[];
+  payments: Payment[];
 }
 
 // =============================================================================
@@ -299,7 +300,7 @@ export default function AdminReports() {
   } = data;
 
   const paymentRate = Math.round(
-    (payments.filter((p: any) => p.status === 'Paid').length /
+    (payments.filter((p: Payment) => p.status === 'Paid').length /
       Math.max(1, payments.length)) *
       100,
   );
@@ -354,7 +355,7 @@ export default function AdminReports() {
         "
       >
         <ReportStatCard
-          title="Collected (Demo)"
+          title="Collected"
           value={formatCurrency(totalRevenue)}
           icon={<BarChart3 className="h-5 w-5" strokeWidth={2} />}
           accentClassName="bg-blue-50 text-blue-600 ring-blue-100"

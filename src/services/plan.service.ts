@@ -36,7 +36,7 @@ export const planService = {
     const endDate = new Date(input.startDate);
     endDate.setMonth(endDate.getMonth() + input.durationMonths);
     const newPlan: Plan = {
-      id: `plan-${Date.now()}`,
+      id: `plan-${crypto.randomUUID()}`,
       ...input,
       totalAmount: input.monthlyAmount * input.durationMonths,
       status: 'active',

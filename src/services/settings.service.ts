@@ -8,7 +8,7 @@ import { persistence, KEYS } from '@/lib/persistence';
 
 function delay(ms = 250): Promise<void> { return new Promise(r => setTimeout(r, ms)); }
 
-export const DEFAULT_SETTINGS: PlatformSettings = {
+const DEFAULT_SETTINGS: PlatformSettings = {
   platformName: 'Millance',
   supportEmail: 'support@millance.in',
   supportPhone: '1800-123-4567',
@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   winnersPerDraw: 10,
   drawDayOfMonth: 28,
   paymentDueDayOfMonth: 25,
+  voucherValidHours: 24,
 
   notifyEmail: true,
   notifySms: true,

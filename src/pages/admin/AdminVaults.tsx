@@ -1,5 +1,5 @@
 // Admin Vaults
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Wallet } from 'lucide-react';
 import { Card, StatCard } from '@/components/ui/Card';
 import { SkeletonTable } from '@/components/ui/Skeleton';

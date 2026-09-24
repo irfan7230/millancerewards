@@ -8,7 +8,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Wallet, Trophy, CreditCard, ChevronRight, FileText, QrCode,
-  Receipt, ArrowUpRight, Sparkles, Plus,
+  Receipt, ArrowUpRight, Sparkles,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -20,10 +20,9 @@ import { drawService } from '@/services/draw.service';
 import { vaultService } from '@/services/vault.service';
 import { planService } from '@/services/plan.service';
 import { useAuthStore } from '@/stores/authStore';
-import { useDemoClockStore } from '@/stores/demoClockStore';
 import { useToast } from '@/stores/uiStore';
 import { useCheckout } from '@/components/payments/CheckoutProvider';
-import { cn } from '@/lib/utils';
+import { cn, currentPeriodLabel } from '@/lib/utils';
 import type { Payment, Draw, Vault, Plan } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 
@@ -63,10 +62,10 @@ const QUICK_ACTIONS = [
 ];
 
 export default function UserDashboard() {
+  const period = currentPeriodLabel();
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
-  const { clock } = useDemoClockStore();
-  const toast = useToast();
+    const toast = useToast();
   const checkout = useCheckout();
 
   const [loading, setLoading] = useState(true);
@@ -107,7 +106,7 @@ export default function UserDashboard() {
       onSuccess: async () => {
         setPaying(payment.id);
         try {
-          const updated = await paymentService.simulatePayment(payment.id, 'Paid');
+          const updated = await paymentService.processPayment(payment.id, 'Paid');
           setPayments(prev => prev.map(p => p.id === payment.id ? updated : p));
           toast.success('Payment successful', `${formatCurrency(payment.amount)} paid for ${payment.periodLabel}`);
         } catch (e) { toast.error('Payment failed', e instanceof Error ? e.message : 'Unknown'); }
@@ -121,7 +120,7 @@ export default function UserDashboard() {
 
   const nextPayment = payments.find(p => p.status === 'Pending');
   const winCount = draws.flatMap(d => d.winners).filter(w => w.userId === userId).length;
-  const recentDraws = [...draws].sort((a, b) => b.executedAt!.localeCompare(a.executedAt!)).slice(0, 4);
+  const recentDraws = [...draws].sort((a, b) => b.executedAt?.localeCompare(a.executedAt ?? '') ?? 0).slice(0, 4);
   const totalContributed = vault?.totalContributed ?? 0;
   const paidCount = payments.filter(p => p.status === 'Paid').length;
   const planPct = plan ? Math.min(100, Math.round((plan.currentMonth / plan.durationMonths) * 100)) : 0;
@@ -136,7 +135,7 @@ export default function UserDashboard() {
 
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
           <div>
-            <p className="text-sm font-medium text-white/70">{clock.currentPeriodLabel} · {user?.groupName} Group</p>
+            <p className="text-sm font-medium text-white/70">{period} · {user?.groupName} Group</p>
             <p className="text-sm text-white/80 mt-3">Available Vault Balance</p>
             <p className="text-4xl sm:text-5xl font-black font-mono tracking-tight mt-1">{formatCurrency(vault?.balance ?? 0)}</p>
             <p className="text-xs text-white/60 mt-2">Lifetime contributed: <span className="font-semibold text-white/90 font-mono">{formatCurrency(totalContributed)}</span></p>

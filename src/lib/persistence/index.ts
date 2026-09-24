@@ -19,7 +19,7 @@ function fullKey(key: string): string {
   return `${PREFIX}${key}`;
 }
 
-export const localStorageAdapter: PersistenceAdapter = {
+const localStorageAdapter: PersistenceAdapter = {
   get<T>(key: string): T | undefined {
     try {
       const raw = localStorage.getItem(fullKey(key));
@@ -63,7 +63,7 @@ export const persistence = localStorageAdapter;
 // Persistence keys — centralised so a typo doesn't create a silent second store
 export const KEYS = {
   AUTH_SESSION:  'auth:session',
-  DEMO_CLOCK:    'demo:clock',
+
   FRANCHISES:    'data:franchises',
   GROUPS:        'data:groups',
   PLANS:         'data:plans',

@@ -1,7 +1,7 @@
 // =============================================================================
 // User Payments — Payment history & active dues
 // =============================================================================
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CreditCard, CheckCircle2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -45,7 +45,7 @@ export default function UserPayments() {
       onSuccess: async () => {
         setPaying(payment.id);
         try {
-          const updated = await paymentService.simulatePayment(payment.id, 'Paid');
+          const updated = await paymentService.processPayment(payment.id, 'Paid');
           setPayments(prev => prev.map(p => p.id === payment.id ? updated : p));
           toast.success('Payment successful', `${formatCurrency(payment.amount)} paid for ${payment.periodLabel}`);
         } catch (e) { toast.error('Payment failed', e instanceof Error ? e.message : 'Unknown'); }

@@ -35,11 +35,7 @@ export function makeId(prefix: string, index: number): string {
 }
 
 /** ISO date string some months before or after a reference date */
-export function monthOffset(base: Date, months: number): string {
-  const d = new Date(base);
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString();
-}
+
 
 /** Format a Date as "Month YYYY" */
 export function periodLabel(date: Date): string {

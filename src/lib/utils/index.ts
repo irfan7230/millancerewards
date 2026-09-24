@@ -1,6 +1,5 @@
 // =============================================================================
-// cn — class merge utility
-// Combines clsx + tailwind-merge to deduplicate conflicting Tailwind classes.
+// Utilities
 // =============================================================================
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -38,21 +37,19 @@ export function formatDateTime(dateStr: string): string {
   });
 }
 
-/** Truncate a string to `max` chars with ellipsis */
-export function truncate(str: string, max: number): string {
-  return str.length > max ? `${str.slice(0, max)}…` : str;
+/**
+ * Returns the current billing period label derived from the real system clock.
+ * e.g. "September 2026"
+ */
+export function currentPeriodLabel(): string {
+  return new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' });
 }
 
-/** Generate initials from a name */
-export function initials(name: string): string {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map(w => w[0]?.toUpperCase() ?? '')
-    .join('');
-}
-
-/** Pluralize a word */
-export function pluralize(count: number, singular: string, plural?: string): string {
-  return `${count} ${count === 1 ? singular : (plural ?? `${singular}s`)}`;
+/**
+ * Returns the start of the current calendar month as an ISO string (local midnight).
+ * Useful for filtering payments by the current month.
+ */
+export function currentMonthStart(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1);
 }

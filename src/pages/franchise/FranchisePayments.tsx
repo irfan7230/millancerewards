@@ -1,5 +1,5 @@
 // Franchise Payments — with simulate action
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CreditCard, CheckCircle2, Search, X } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -41,7 +41,7 @@ export default function FranchisePayments() {
   const simulatePaid = async (paymentId: string) => {
     setSimulating(paymentId);
     try {
-      const updated = await paymentService.simulatePayment(paymentId, 'Paid');
+      const updated = await paymentService.processPayment(paymentId, 'Paid');
       setPayments(prev => prev.map(p => p.id === paymentId ? updated : p));
       toast.success('Payment recorded as Paid');
     } catch (e) { toast.error('Failed', e instanceof Error ? e.message : 'Unknown'); }

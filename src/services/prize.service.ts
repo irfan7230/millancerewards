@@ -27,7 +27,7 @@ export const prizeService = {
 
   async createPrize(prize: Omit<Prize, 'id'>): Promise<Prize> {
     await delay(300);
-    const newPrize: Prize = { ...prize, id: `prz-${Date.now()}` };
+    const newPrize: Prize = { ...prize, id: `prz-${crypto.randomUUID()}` };
     saveAll([...getAll(), newPrize]);
     return newPrize;
   },

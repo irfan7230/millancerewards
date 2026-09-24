@@ -89,13 +89,17 @@ export function SkeletonUserHome() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-3 divide-x divide-neutral-100 rounded-2xl border border-neutral-200 bg-white shadow-sm sm:gap-4 sm:border-0 sm:bg-transparent sm:shadow-none sm:divide-x-0">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="rounded-2xl bg-white border border-neutral-200 p-3 sm:p-4 flex items-center gap-3">
+          <div key={i} className="p-3 sm:p-4 flex items-center gap-3 sm:rounded-2xl sm:bg-white sm:border sm:border-neutral-200">
             <Skeleton className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl" />
-            <div className="flex-1 space-y-1.5">
+            <div className="flex-1 space-y-1.5 hidden sm:block">
               <Skeleton className="h-3 w-14" />
               <Skeleton className="h-4 w-10" />
+            </div>
+            <div className="flex-1 space-y-1.5 sm:hidden">
+               <Skeleton className="h-3 w-10 mx-auto" />
+               <Skeleton className="h-4 w-6 mx-auto" />
             </div>
           </div>
         ))}

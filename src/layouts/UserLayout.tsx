@@ -4,7 +4,6 @@
 // Mobile: compact top bar + bottom tab navigation.
 // DESIGN-SYSTEM.md: user portal is mobile-first, but must scale up cleanly.
 // =============================================================================
-import React from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, CreditCard, Wallet, Trophy,
@@ -12,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationBell } from '@/components/ui/NotificationBell';
+import { PortalNoticesBanner } from '@/components/ui/PortalNoticesBanner';
 import { useAuthStore } from '@/stores/authStore';
 
 // Primary tabs (also shown in the mobile bottom bar)
@@ -98,6 +98,7 @@ export function UserLayout() {
             </div>
           </div>
           <button
+            type="button"
             className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 rounded-xl transition-colors"
             onClick={handleLogout}
           >
@@ -154,6 +155,7 @@ export function UserLayout() {
 
         {/* Main content */}
         <main className="flex-1 min-w-0 overflow-x-hidden px-4 py-5 sm:px-6 md:px-8 md:py-8 pb-24 md:pb-8">
+          <PortalNoticesBanner audience="user" className="mb-4" />
           <Outlet />
         </main>
       </div>

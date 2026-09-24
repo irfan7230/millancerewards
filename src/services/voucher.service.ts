@@ -10,12 +10,11 @@ import { persistence, KEYS } from '@/lib/persistence';
 import { vaultService } from './vault.service';
 import { notificationService } from './notification.service';
 import { activityService } from './activity.service';
+import { settingsService } from './settings.service';
 
 function delay(ms = 250): Promise<void> { return new Promise(r => setTimeout(r, ms)); }
 function getAll(): Voucher[] { return persistence.get<Voucher[]>(KEYS.VOUCHERS) ?? []; }
 function saveAll(d: Voucher[]): void { persistence.set(KEYS.VOUCHERS, d); }
-
-const VALID_HOURS = 24;
 
 // Normalize a scanned/typed code (case-insensitive, trims spaces).
 function normalize(code: string): string {
@@ -39,6 +38,7 @@ export const voucherService = {
   /** Member issues a voucher from their vault balance. */
   async issue(input: { code: string; userId: string; franchiseId: string; value: number }): Promise<Voucher> {
     await delay();
+    const settings = await settingsService.getSettings();
     const now = Date.now();
     const voucher: Voucher = {
       id: `vch-${now}-${Math.random().toString(36).slice(2)}`,
@@ -48,7 +48,7 @@ export const voucherService = {
       value: input.value,
       status: 'active',
       issuedAt: new Date(now).toISOString(),
-      expiresAt: new Date(now + VALID_HOURS * 3600 * 1000).toISOString(),
+      expiresAt: new Date(now + settings.voucherValidHours * 3600 * 1000).toISOString(),
     };
     // Replace any prior active voucher with the same code (defensive).
     saveAll([...getAll().filter(v => v.code !== voucher.code), voucher]);

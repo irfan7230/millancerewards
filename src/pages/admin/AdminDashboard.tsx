@@ -1,11 +1,12 @@
 // =============================================================================
 // Admin Dashboard — cross-tenant overview
 // =============================================================================
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Users, Wallet, Trophy, AlertCircle, Sparkles, Activity } from 'lucide-react';
+import { Building2, Users, Wallet, Trophy, AlertCircle, Sparkles, Activity, Globe } from 'lucide-react';
 import { StatCard, CardHeader, CardTitle, MotionCard } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+
 import { SkeletonDashboard } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/States';
 import { franchiseService } from '@/services/franchise.service';
@@ -129,6 +130,30 @@ export default function AdminDashboard() {
           className="stagger-4 animate-slide-in"
         />
       </div>
+
+      {/* CMS Quick Access */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="rounded-2xl border border-brand-100 bg-gradient-to-r from-brand-50 to-white p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
+        <div className="flex items-start gap-4">
+          <div className="h-11 w-11 rounded-xl bg-brand-600 flex items-center justify-center shrink-0">
+            <Globe className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-neutral-900">Content Management</h3>
+            <p className="text-xs text-neutral-500 mt-0.5">Edit Landing Page content, promo banners, prize lineup, and broadcast notices to User &amp; Franchise portals.</p>
+          </div>
+        </div>
+        <Link
+          to="/admin/content"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-bold hover:bg-brand-700 transition-colors shrink-0"
+        >
+          <Globe className="h-4 w-4" /> Open CMS
+        </Link>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Active Franchises */}

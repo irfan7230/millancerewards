@@ -20,6 +20,7 @@ import {
   CreditCard, Building2, Wallet, Lock, Clock, Search, MoreHorizontal,
 } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
+import { settingsService } from '@/services/settings.service';
 
 export interface CheckoutDetails {
   amount: number;          // in rupees
@@ -64,7 +65,18 @@ export function RazorpayCheckout({ open, details, onClose, onSuccess }: Props) {
   const [wallet, setWallet] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(280);
   const [search, setSearch] = useState(''); // cosmetic UPI-app filter only
+  const [platformName, setPlatformName] = useState('Millance');
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const timeout1Ref = useRef<number | undefined>(undefined);
+  const timeout2Ref = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    settingsService.getSettings().then(s => setPlatformName(s.platformName)).catch(() => {});
+    return () => {
+      window.clearTimeout(timeout1Ref.current);
+      window.clearTimeout(timeout2Ref.current);
+    };
+  }, []);
 
   // Open/close the native dialog in sync with `open`.
   useEffect(() => {
@@ -99,9 +111,9 @@ export function RazorpayCheckout({ open, details, onClose, onSuccess }: Props) {
   const pay = () => {
     setStage('processing');
     // Simulate gateway roundtrip → success.
-    window.setTimeout(() => {
+    timeout1Ref.current = window.setTimeout(() => {
       setStage('success');
-      window.setTimeout(() => {
+      timeout2Ref.current = window.setTimeout(() => {
         onSuccess();
         onClose();
       }, 1400);
@@ -136,9 +148,9 @@ export function RazorpayCheckout({ open, details, onClose, onSuccess }: Props) {
           <aside className="shrink-0 sm:w-[230px] bg-[#0B0C10] text-white flex sm:flex-col">
             <div className="flex sm:flex-col w-full p-4 sm:p-5 sm:gap-6 items-center sm:items-stretch gap-3">
               <div className="flex items-center gap-3 min-w-0 flex-1 sm:flex-none">
-                <div className="h-9 w-9 rounded-lg bg-brand-600 flex items-center justify-center font-bold text-[15px] shrink-0">M</div>
+                <div className="h-9 w-9 rounded-lg bg-brand-600 flex items-center justify-center font-bold text-[15px] shrink-0">{platformName[0]}</div>
                 <div className="min-w-0">
-                  <p className="text-[13px] font-semibold truncate">Millance</p>
+                  <p className="text-[13px] font-semibold truncate">{platformName}</p>
                   <p className="text-[11px] text-white/45 truncate">{details.description}</p>
                 </div>
               </div>
@@ -495,6 +507,7 @@ function ProcessingView({ method }: { method: Method }) {
 
 // ── Success ─────────────────────────────────────────────────────────────────────
 function SuccessView({ amount }: { amount: number }) {
+  const refString = useMemo(() => `pay_${crypto.randomUUID().slice(0, 8).toUpperCase()}`, []);
   return (
     <div className="px-6 py-14 flex flex-col items-center text-center">
       <div className="h-16 w-16 rounded-full bg-emerald-50 ring-8 ring-emerald-50/60 flex items-center justify-center">
@@ -505,7 +518,7 @@ function SuccessView({ amount }: { amount: number }) {
       <p className="mt-6 text-[16px] font-semibold text-neutral-900">Payment successful</p>
       <p className="mt-1 text-[13px] text-neutral-500">{formatCurrency(amount)} paid to Millance</p>
       <p className="mt-5 text-[11px] font-mono tabular-nums text-neutral-400">
-        Ref: pay_{Math.random().toString(36).slice(2, 12).toUpperCase()}
+        Ref: {refString}
       </p>
     </div>
   );

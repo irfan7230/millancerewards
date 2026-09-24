@@ -26,7 +26,7 @@ export const vaultService = {
     return getAll();
   },
 
-  async getFranchiseVaults(franchiseId: string, userIds: string[]): Promise<Vault[]> {
+  async getFranchiseVaults(_franchiseId: string, userIds: string[]): Promise<Vault[]> {
     await delay();
     const set = new Set(userIds);
     return getAll().filter(v => set.has(v.userId));
@@ -87,26 +87,47 @@ export const vaultService = {
   /** Zero out a vault (for draw winners) — two transactions for auditability */
   async zeroOutVault(userId: string, prizeValue: number, meta: { drawId: string; prizeId: string }): Promise<Vault> {
     await delay(200);
-    // First: lucky_draw_prize (informational)
-    await vaultService.applyTransaction(userId, {
+    const all = getAll();
+    const idx = all.findIndex(v => v.userId === userId);
+    let vault: Vault = idx === -1 
+      ? { userId, balance: 0, totalContributed: 0, totalUsed: 0, transactions: [] }
+      : { ...all[idx], transactions: [...all[idx].transactions] };
+
+    const tx1: VaultTransaction = {
+      id: `vtx-${crypto.randomUUID()}`,
       userId,
       type: 'lucky_draw_prize',
       amount: prizeValue,
       createdAt: new Date().toISOString(),
+      balanceAfter: vault.balance + prizeValue,
       meta,
-    });
-    // Get current balance (after prize credit is informational — we re-read)
-    const all = getAll();
-    const vault = all.find(v => v.userId === userId);
-    if (!vault) throw new Error(`Vault for user ${userId} not found`);
-    // prize_deduction brings balance to 0
+    };
+    
+    vault.balance += prizeValue;
+    vault.totalContributed += prizeValue;
+    vault.transactions.push(tx1);
+
     const deduction = -(vault.balance);
-    return vaultService.applyTransaction(userId, {
+    const tx2: VaultTransaction = {
+      id: `vtx-${crypto.randomUUID()}`,
       userId,
       type: 'prize_deduction',
       amount: deduction,
       createdAt: new Date().toISOString(),
+      balanceAfter: 0,
       meta: { ...meta, note: 'Prize received — vault balance zeroed per plan rules' },
-    });
+    };
+
+    vault.balance = 0;
+    vault.totalUsed += Math.abs(deduction);
+    vault.transactions.push(tx2);
+
+    if (idx === -1) {
+      saveAll([...all, vault]);
+    } else {
+      all[idx] = vault;
+      saveAll(all);
+    }
+    return vault;
   },
 };

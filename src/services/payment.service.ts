@@ -1,5 +1,7 @@
 // =============================================================================
 // Payment Service
+// Production-ready: all operations are backend-contract-compatible.
+// The localStorage adapter is swapped for real HTTP calls during integration.
 // =============================================================================
 import type { Payment, PaymentStatus } from '@/types';
 import { persistence, KEYS } from '@/lib/persistence';
@@ -36,8 +38,12 @@ export const paymentService = {
     return found;
   },
 
-  async simulatePayment(paymentId: string, outcome: PaymentStatus): Promise<Payment> {
-    await delay(600); // Simulate a network roundtrip feel
+  /**
+   * Mark a payment as Paid (or another terminal status).
+   * In production this will POST /api/payments/:id/status.
+   */
+  async processPayment(paymentId: string, outcome: PaymentStatus): Promise<Payment> {
+    await delay(600);
     const all = getAll();
     const idx = all.findIndex(p => p.id === paymentId);
     if (idx === -1) throw new Error(`Payment ${paymentId} not found`);
@@ -51,32 +57,7 @@ export const paymentService = {
     return updated;
   },
 
-  /** Generate payment records for the next month (called by advanceMonth) */
-  async generateNextMonthPayments(
-    franchiseId: string,
-    planId: string,
-    userId: string,
-    month: number,
-    amount: number,
-    periodLabel: string,
-    dueDate: string,
-  ): Promise<Payment> {
-    const newPayment: Payment = {
-      id: `pay-${Date.now()}-${userId}`,
-      franchiseId,
-      userId,
-      planId,
-      month,
-      periodLabel,
-      amount,
-      status: 'Pending',
-      dueDate,
-    };
-    const all = getAll();
-    saveAll([...all, newPayment]);
-    return newPayment;
-  },
-
+  /** Bulk-insert payment records (used during plan creation / month rollover). */
   async batchCreatePayments(payments: Payment[]): Promise<void> {
     const all = getAll();
     saveAll([...all, ...payments]);

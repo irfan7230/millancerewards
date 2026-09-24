@@ -3,7 +3,7 @@
 // Search (group name) + franchise filter. Collapsible franchise sections;
 // mobile cards, desktop tables. Shows occupancy vs capacity.
 // =============================================================================
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Layers } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';

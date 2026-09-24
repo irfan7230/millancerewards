@@ -2,7 +2,7 @@
 // AdminLayout — Premium dark sidebar shell with smooth animations
 // =============================================================================
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -17,6 +17,7 @@ import {
   Wallet,
   BarChart3,
   Settings,
+  Globe,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -85,6 +86,12 @@ const NAV_ITEMS = [
     group: 'Finance',
   },
   {
+    to: '/admin/content',
+    label: 'Content',
+    icon: Globe,
+    group: 'CMS',
+  },
+  {
     to: '/admin/reports',
     label: 'Reports',
     icon: BarChart3,
@@ -102,6 +109,7 @@ const GROUP_ORDER = [
   'Overview',
   'Management',
   'Finance',
+  'CMS',
   'Analytics',
   'System',
 ];

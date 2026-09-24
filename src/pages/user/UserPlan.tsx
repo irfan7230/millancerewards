@@ -1,7 +1,7 @@
 // =============================================================================
 // User Plan — Details of the member's current active plan
 // =============================================================================
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileText, CheckCircle2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, StatCard } from '@/components/ui/Card';
 import { SkeletonDashboard } from '@/components/ui/Skeleton';

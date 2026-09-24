@@ -16,7 +16,7 @@ import { createPRNG, pickUnique } from '@/data/generators/utils';
  * Pick `count` unique items from `arr` using a non-deterministic seed
  * (Date.now XOR crypto random 32-bit) so live draws are genuinely random.
  */
-export function pickRandomUnique<T>(arr: T[], count: number, seed?: number): T[] {
+function pickRandomUnique<T>(arr: T[], count: number, seed?: number): T[] {
   const s =
     seed ??
     (Date.now() ^
@@ -40,6 +40,8 @@ export interface DrawInput {
   monthPayments: Payment[];
   priorDraws: Draw[];
   prizePool: Prize[];
+  winnersPerDraw: number;
+  currentDate: string;
 }
 
 /**
@@ -59,6 +61,8 @@ export function simulateLuckyDraw(input: DrawInput): DrawResult {
     monthPayments,
     priorDraws,
     prizePool,
+    winnersPerDraw,
+    currentDate,
   } = input;
 
   // Step 4: Idempotency — if a completed draw already exists, return it
@@ -90,28 +94,28 @@ export function simulateLuckyDraw(input: DrawInput): DrawResult {
   );
 
   // Step 3: Insufficient participants guard
-  if (eligible.length < 10) {
+  if (eligible.length < winnersPerDraw) {
     return {
       status: 'blocked',
       reason: 'insufficient_participants',
       eligibleCount: eligible.length,
-      requiredCount: 10,
+      requiredCount: winnersPerDraw,
     };
   }
 
   // Prize pool guard
-  if (prizePool.length < 10) {
+  if (prizePool.length < winnersPerDraw) {
     return {
       status: 'blocked',
       reason: 'insufficient_prizes',
       eligibleCount: eligible.length,
-      requiredCount: 10,
+      requiredCount: winnersPerDraw,
     };
   }
 
   // Steps 5–6: Random selection — computed first, animation dramatises the result
-  const selectedUsers = pickRandomUnique(eligible, 10);
-  const selectedPrizes = pickRandomUnique(prizePool, 10);
+  const selectedUsers = pickRandomUnique(eligible, winnersPerDraw);
+  const selectedPrizes = pickRandomUnique(prizePool, winnersPerDraw);
 
   const winners: DrawWinner[] = selectedUsers.map((user, i) => ({
     userId: user.id,
@@ -119,19 +123,18 @@ export function simulateLuckyDraw(input: DrawInput): DrawResult {
     rank: i + 1,
   }));
 
-  const now = new Date().toISOString();
 
   const draw: Draw = {
-    id: `drw-live-${now}`,
+    id: `drw-live-${crypto.randomUUID()}`,
     franchiseId,
     groupId,
     planId,
     month,
-    periodLabel: new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' }),
+    periodLabel: new Date(currentDate).toLocaleString('en-IN', { month: 'long', year: 'numeric' }),
     status: 'completed',
     eligibleUserIds: eligible.map(u => u.id),
     winners,
-    executedAt: now,
+    executedAt: new Date().toISOString(), // Wall-clock time for execution log
   };
 
   return { status: 'completed', draw };
@@ -141,7 +144,7 @@ export function simulateLuckyDraw(input: DrawInput): DrawResult {
  * Check eligibility without running the draw.
  * Used by the draw preparation screen.
  */
-export function checkDrawEligibility(input: Omit<DrawInput, 'prizePool'>): {
+export function checkDrawEligibility(input: Omit<DrawInput, 'prizePool' | 'winnersPerDraw' | 'currentDate'>): {
   eligibleCount: number;
   priorWinnerIds: string[];
   alreadyCompleted: boolean;

@@ -1,7 +1,7 @@
 // =============================================================================
 // User Vault — Ledger and balance tracking
 // =============================================================================
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/States';
