@@ -2,7 +2,7 @@
 // User Payments — payment history, pending dues, and coupon/offer application.
 // Users can apply admin-created coupon codes before initiating checkout.
 // =============================================================================
-import { useEffect, useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { CreditCard, CheckCircle2, Tag, X, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -16,8 +16,9 @@ import type { CouponApplyResult } from '@/services/coupon.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/stores/uiStore';
 import { useCheckout } from '@/components/payments/CheckoutProvider';
-import type { Payment } from '@/types';
+import type { Payment, PaymentStatus } from '@/types';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ── Coupon input widget ──────────────────────────────────────────────────────
 
@@ -125,10 +126,12 @@ function CouponInput({
 
 function NextPaymentCard({
   payment,
-  onPaid,
+  processPaymentMutation,
+  redeemCouponMutation,
 }: {
   payment: Payment;
-  onPaid: (updated: Payment) => void;
+  processPaymentMutation: ReturnType<typeof useMutation>;
+  redeemCouponMutation: ReturnType<typeof useMutation>;
 }) {
   const { user } = useAuthStore();
   const toast = useToast();
@@ -148,12 +151,10 @@ function NextPaymentCard({
       onSuccess: async () => {
         setPaying(true);
         try {
-          const updated = await paymentService.processPayment(payment.id, 'Paid');
-          // Redeem the coupon so usage is tracked
+          await processPaymentMutation.mutateAsync({ paymentId: payment.id, status: 'Paid' });
           if (appliedCoupon) {
-            await couponService.redeem(appliedCoupon.coupon.id, user?.id ?? '');
+            await redeemCouponMutation.mutateAsync({ couponId: appliedCoupon.coupon.id, userId: user?.id ?? '' });
           }
-          onPaid(updated);
           toast.success(
             'Payment successful',
             appliedCoupon
@@ -233,28 +234,36 @@ function NextPaymentCard({
 export default function UserPayments() {
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
+  const queryClient = useQueryClient();
 
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: payments = [], isLoading: loading, error } = useQuery({
+    queryKey: ['user', 'payments', userId],
+    queryFn: () => paymentService.getUserPayments(userId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!userId,
+  });
 
-  const load = async () => {
-    if (!userId) return;
-    setLoading(true); setError(null);
-    try { setPayments(await paymentService.getUserPayments(userId)); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed to load payments'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, [userId]);
+  const processPaymentMutation = useMutation({
+    mutationFn: ({ paymentId, status }: { paymentId: string; status: PaymentStatus }) =>
+      paymentService.processPayment(paymentId, status),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['user', 'payments', userId], (prev: Payment[] | undefined) =>
+        prev?.map((p) => (p.id === updated.id ? updated : p)) ?? [updated],
+      );
+      queryClient.invalidateQueries({ queryKey: ['user', 'vault', userId] });
+    },
+  });
+
+  const redeemCouponMutation = useMutation({
+    mutationFn: ({ couponId, userId: uid }: { couponId: string; userId: string }) =>
+      couponService.redeem(couponId, uid),
+  });
 
   const sorted = [...payments].sort((a, b) => b.month - a.month);
   const nextPayment = sorted.find(p => p.status === 'Pending');
   const pending = payments.filter(p => p.status === 'Pending').length;
   const { page, setPage, pageItems, pageCount, total, range } = usePagination(sorted, 10);
-
-  const handlePaid = (updated: Payment) => {
-    setPayments(prev => prev.map(p => p.id === updated.id ? updated : p));
-  };
 
   return (
     <div className="space-y-6">
@@ -276,7 +285,11 @@ export default function UserPayments() {
           {loading ? (
             <div className="h-56 rounded-2xl bg-neutral-100 animate-pulse" />
           ) : nextPayment ? (
-            <NextPaymentCard payment={nextPayment} onPaid={handlePaid} />
+            <NextPaymentCard
+              payment={nextPayment}
+              processPaymentMutation={processPaymentMutation as any}
+              redeemCouponMutation={redeemCouponMutation as any}
+            />
           ) : (
             <Card>
               <div className="py-8 flex flex-col items-center text-center gap-3">
@@ -313,7 +326,10 @@ export default function UserPayments() {
             {loading ? (
               <SkeletonTable />
             ) : error ? (
-              <ErrorState description={error} onRetry={load} />
+              <ErrorState
+                description={error instanceof Error ? error.message : 'Failed to load payments'}
+                onRetry={() => queryClient.invalidateQueries({ queryKey: ['user', 'payments', userId] })}
+              />
             ) : payments.length === 0 ? (
               <EmptyState title="No payments yet" icon={<CreditCard className="h-6 w-6" />} />
             ) : (

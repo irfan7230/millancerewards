@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Layers, Search, X } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -15,7 +16,7 @@ import { Pagination, usePagination } from '@/components/ui/Pagination';
 import { groupService } from '@/services/group.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/stores/uiStore';
-import type { Group, GroupType, NewGroupInput } from '@/types';
+import type { Group, NewGroupInput } from '@/types';
 import { formatDate } from '@/lib/utils';
 
 const groupSchema = z.object({
@@ -28,13 +29,9 @@ export default function FranchiseGroups() {
   const { user } = useAuthStore();
   const franchiseId = user?.franchiseId ?? '';
   const toast = useToast();
+  const queryClient = useQueryClient();
 
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [groupTypes, setGroupTypes] = useState<GroupType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
 
@@ -42,36 +39,84 @@ export default function FranchiseGroups() {
     useForm<GroupForm>({ resolver: zodResolver(groupSchema) });
   const selectedTypeId = watch('groupTypeId');
 
-  const load = async () => {
-    setLoading(true); setError(null);
-    try {
-      setGroups(await groupService.getFranchiseGroups(franchiseId));
-      setGroupTypes(groupService.getGroupTypes());
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { if (franchiseId) void load(); }, [franchiseId]);
+  const { data: groups = [], isLoading: groupsLoading, error: groupsError } = useQuery({
+    queryKey: ['franchiseGroups', franchiseId],
+    queryFn: () => groupService.getFranchiseGroups(franchiseId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!franchiseId,
+  });
 
-  const onSubmit = async (data: GroupForm) => {
-    setCreating(true);
-    try {
-      const g = await groupService.createGroup({ ...data, franchiseId } as NewGroupInput);
-      setGroups(prev => [...prev, g]);          // reactive list update
-      toast.success('Group created', g.name);
-      setDialogOpen(false); reset();
-    } catch (e) { toast.error('Failed', e instanceof Error ? e.message : 'Unknown'); }
-    finally { setCreating(false); }
+  const { data: groupTypes = [], isLoading: groupTypesLoading } = useQuery({
+    queryKey: ['groupTypes'],
+    queryFn: () => groupService.getGroupTypes(),
+    staleTime: 15_000,
+    retry: 2,
+  });
+
+  const loading = groupsLoading || groupTypesLoading;
+  const error = groupsError
+    ? groupsError instanceof Error
+      ? groupsError.message
+      : 'Failed'
+    : null;
+
+  const createGroupMutation = useMutation({
+    mutationFn: (data: GroupForm) =>
+      groupService.createGroup({ ...data, franchiseId } as NewGroupInput),
+    onMutate: async (data: GroupForm) => {
+      await queryClient.cancelQueries({ queryKey: ['franchiseGroups', franchiseId] });
+      const previousGroups = queryClient.getQueryData<Group[]>(['franchiseGroups', franchiseId]);
+
+      const optimisticGroup: Group = {
+        id: `temp-${Date.now()}`,
+        name: data.name,
+        groupTypeId: data.groupTypeId,
+        franchiseId,
+        memberCount: 0,
+        createdAt: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData<Group[]>(
+        ['franchiseGroups', franchiseId],
+        (old) => (old ? [...old, optimisticGroup] : [optimisticGroup]),
+      );
+
+      return { previousGroups };
+    },
+    onSuccess: (createdGroup) => {
+      queryClient.setQueryData<Group[]>(
+        ['franchiseGroups', franchiseId],
+        (old) =>
+          old
+            ? old.map((g) => (g.id.startsWith('temp-') ? createdGroup : g))
+            : [createdGroup],
+      );
+      toast.success('Group created', createdGroup.name);
+      setDialogOpen(false);
+      reset();
+    },
+    onError: (err, _variables, context) => {
+      if (context?.previousGroups) {
+        queryClient.setQueryData(['franchiseGroups', franchiseId], context.previousGroups);
+      }
+      toast.error('Failed', err instanceof Error ? err.message : 'Unknown');
+    },
+  });
+
+  const onSubmit = (data: GroupForm) => {
+    void createGroupMutation.mutate(data);
   };
 
-  const gtMap = new Map(groupTypes.map(t => [t.id, t]));
+  const gtMap = useMemo(() => new Map(groupTypes.map(t => [t.id, t])), [groupTypes]);
   const selectedType = groupTypes.find(t => t.id === selectedTypeId);
 
   const q = search.trim().toLowerCase();
-  const filteredGroups = groups.filter(g => {
+  const filteredGroups = useMemo(() => groups.filter(g => {
     if (typeFilter !== 'all' && g.groupTypeId !== typeFilter) return false;
     if (q && !g.name.toLowerCase().includes(q)) return false;
     return true;
-  });
+  }), [groups, typeFilter, q]);
   const { page, setPage, pageItems, pageCount, total, range } = usePagination(filteredGroups, 12);
 
   return (
@@ -139,7 +184,10 @@ export default function FranchiseGroups() {
       {loading ? (
         <Card padding="none"><SkeletonTable /></Card>
       ) : error ? (
-        <ErrorState description={error} onRetry={load} />
+        <ErrorState description={error} onRetry={() => {
+          void queryClient.invalidateQueries({ queryKey: ['franchiseGroups', franchiseId] });
+          void queryClient.invalidateQueries({ queryKey: ['groupTypes'] });
+        }} />
       ) : groups.length === 0 ? (
         <Card><EmptyState title="No groups yet" icon={<Layers className="h-6 w-6" />} description="Create your first membership pool to start onboarding members." action={{ label: 'Create Group', onClick: () => setDialogOpen(true) }} /></Card>
       ) : filteredGroups.length === 0 ? (
@@ -232,7 +280,7 @@ export default function FranchiseGroups() {
         </form>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="primary" loading={creating} onClick={handleSubmit(onSubmit)}>Create Group</Button>
+          <Button variant="primary" loading={createGroupMutation.isPending} onClick={handleSubmit(onSubmit)}>Create Group</Button>
         </DialogFooter>
       </Dialog>
     </div>

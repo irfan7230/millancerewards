@@ -1,7 +1,7 @@
 // =============================================================================
 // User Profile — View and edit profile details
 // =============================================================================
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Mail, Phone, Building2, MapPin, LogOut, User as UserIcon, Calendar, Contact, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { UserStatusBadge } from '@/components/ui/Badge';
@@ -13,26 +13,34 @@ import { useToast } from '@/stores/uiStore';
 import { userService } from '@/services/user.service';
 import { formatDate } from '@/lib/utils';
 import type { FranchiseUser } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function UserProfile() {
   const { user: authUser, logout, updateUser: updateAuthUser } = useAuthStore();
   const toast = useToast();
+  const queryClient = useQueryClient();
+  const userId = authUser?.id ?? '';
 
-  const [user, setUser] = useState<FranchiseUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: user = null, isLoading: loading } = useQuery({
+    queryKey: ['user', 'profile', userId],
+    queryFn: () => userService.getUser(userId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!userId,
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: ({ uid, data }: { uid: string; data: Partial<FranchiseUser> }) =>
+      userService.updateUser(uid, data),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['user', 'profile', userId], updated);
+    },
+  });
 
   // Edit form state
   const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<Partial<FranchiseUser>>({});
-
-  useEffect(() => {
-    if (!authUser?.id) return;
-    userService.getUser(authUser.id)
-      .then(setUser)
-      .catch((err) => toast.error('Failed to load profile', err.message))
-      .finally(() => setLoading(false));
-  }, [authUser?.id, toast]);
+  const isSaving = updateProfileMutation.isPending;
 
   if (!authUser) return null;
   if (loading) return <SkeletonUserHome />;
@@ -57,20 +65,16 @@ export default function UserProfile() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
     try {
-      const updated = await userService.updateUser(user.id, formData);
-      setUser(updated);
-      
+      const updated = await updateProfileMutation.mutateAsync({ uid: user.id, data: formData });
+
       // Sync auth session if name or phone changed
       updateAuthUser({ name: updated.name, phone: updated.phone });
-      
+
       toast.success('Profile updated successfully');
       setIsEditing(false);
     } catch (err) {
       toast.error('Failed to update profile', err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setIsSaving(false);
     }
   };
 

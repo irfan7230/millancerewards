@@ -184,7 +184,7 @@ export default function LandingPage() {
   }));
 
   return (
-    <div className="bg-[#F8FAFC] text-[#0F172A] font-sans antialiased overflow-x-hidden selection:bg-fuchsia-500 selection:text-white">
+    <div className="landing-page bg-[#F8FAFC] text-[#0F172A] font-sans antialiased overflow-x-hidden selection:bg-fuchsia-500 selection:text-white">
 
 
 

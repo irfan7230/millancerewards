@@ -1,65 +1,48 @@
-// =============================================================================
-// Payment Service
-// Production-ready: all operations are backend-contract-compatible.
-// The localStorage adapter is swapped for real HTTP calls during integration.
-// =============================================================================
 import type { Payment, PaymentStatus } from '@/types';
-import { persistence, KEYS } from '@/lib/persistence';
+import { api } from '@/lib/api/client';
+import { useAuthStore } from '@/stores/authStore';
 
-function delay(ms = 300): Promise<void> { return new Promise(r => setTimeout(r, ms)); }
-function getAll(): Payment[] { return persistence.get<Payment[]>(KEYS.PAYMENTS) ?? []; }
-function saveAll(d: Payment[]): void { persistence.set(KEYS.PAYMENTS, d); }
+function resolveFranchiseId(provided?: string): string {
+  if (provided) return provided;
+  const user = useAuthStore.getState().user;
+  if (user?.franchiseId) return user.franchiseId;
+  throw new Error('Franchise context unavailable: pass franchiseId explicitly or log in.');
+}
 
 export const paymentService = {
   async getFranchisePayments(franchiseId: string): Promise<Payment[]> {
-    await delay();
-    return getAll().filter(p => p.franchiseId === franchiseId);
+    return api.get<Payment[]>(`/core/${resolveFranchiseId(franchiseId)}/payments`);
   },
 
   async getAllPayments(): Promise<Payment[]> {
-    await delay();
-    return getAll();
+    return api.get<Payment[]>('/admin/payments');
   },
 
-  async getUserPayments(userId: string): Promise<Payment[]> {
-    await delay(200);
-    return getAll().filter(p => p.userId === userId);
+  async getUserPayments(userId: string, franchiseId?: string): Promise<Payment[]> {
+    return api.get<Payment[]>(`/core/${resolveFranchiseId(franchiseId)}/users/${userId}/payments`);
   },
 
-  async getPlanPayments(planId: string): Promise<Payment[]> {
-    await delay(200);
-    return getAll().filter(p => p.planId === planId);
+  async getPlanPayments(planId: string, franchiseId?: string): Promise<Payment[]> {
+    const all = await paymentService.getFranchisePayments(resolveFranchiseId(franchiseId));
+    return all.filter((p) => p.planId === planId);
   },
 
-  async getPayment(id: string): Promise<Payment> {
-    await delay(150);
-    const found = getAll().find(p => p.id === id);
+  async getPayment(id: string, franchiseId?: string): Promise<Payment> {
+    const all = await paymentService.getFranchisePayments(resolveFranchiseId(franchiseId));
+    const found = all.find((p) => p.id === id);
     if (!found) throw new Error(`Payment ${id} not found`);
     return found;
   },
 
-  /**
-   * Mark a payment as Paid (or another terminal status).
-   * In production this will POST /api/payments/:id/status.
-   */
-  async processPayment(paymentId: string, outcome: PaymentStatus): Promise<Payment> {
-    await delay(600);
-    const all = getAll();
-    const idx = all.findIndex(p => p.id === paymentId);
-    if (idx === -1) throw new Error(`Payment ${paymentId} not found`);
-    const updated: Payment = {
-      ...all[idx],
-      status: outcome,
-      paidAt: outcome === 'Paid' ? new Date().toISOString() : undefined,
-    };
-    all[idx] = updated;
-    saveAll(all);
-    return updated;
+  async processPayment(paymentId: string, outcome: PaymentStatus, franchiseId?: string): Promise<Payment> {
+    return api.post<Payment>(
+      `/core/${resolveFranchiseId(franchiseId)}/payments/${paymentId}/simulate`,
+      { outcome },
+    );
   },
 
-  /** Bulk-insert payment records (used during plan creation / month rollover). */
-  async batchCreatePayments(payments: Payment[]): Promise<void> {
-    const all = getAll();
-    saveAll([...all, ...payments]);
+  async batchCreatePayments(_payments: Payment[]): Promise<void> {
+    // Plan/month payment generation is a server-side responsibility (transactional).
+    // This client-side helper is a no-op in production.
   },
 };

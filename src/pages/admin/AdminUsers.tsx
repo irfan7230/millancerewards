@@ -3,8 +3,9 @@
 // Search (name/email/franchise) + franchise + status filters. Each franchise is
 // a collapsible section (FranchiseSection). Mobile cards, desktop tables.
 // =============================================================================
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Users, UserRound } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { UserStatusBadge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { SkeletonTable } from '@/components/ui/Skeleton';
@@ -17,25 +18,26 @@ import { franchiseService } from '@/services/franchise.service';
 import type { FranchiseUser, Franchise } from '@/types';
 import { formatDate } from '@/lib/utils';
 
-export default function AdminUsers() {
-  const [users, setUsers] = useState<FranchiseUser[]>([]);
-  const [franchises, setFranchises] = useState<Franchise[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface UsersData { users: FranchiseUser[]; franchises: Franchise[]; }
 
+export default function AdminUsers() {
   const [search, setSearch] = useState('');
   const [franchiseFilter, setFranchiseFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const load = async () => {
-    setLoading(true); setError(null);
-    try {
+  const { data, isLoading: loading, error: queryError, refetch: load } = useQuery({
+    queryKey: ['adminUsers'],
+    queryFn: async (): Promise<UsersData> => {
       const [u, f] = await Promise.all([userService.getAllUsers(), franchiseService.getFranchises()]);
-      setUsers(u); setFranchises(f);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, []);
+      return { users: u, franchises: f };
+    },
+    staleTime: 15_000,
+    retry: 2,
+  });
+
+  const users = data?.users ?? [];
+  const franchises = data?.franchises ?? [];
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed to load') : null;
 
   const q = search.trim().toLowerCase();
   const franchiseMap = useMemo(() => new Map(franchises.map(f => [f.id, f.name])), [franchises]);

@@ -1,7 +1,6 @@
 // =============================================================================
 // Franchise Dashboard — the primary management view
 // =============================================================================
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Trophy, CreditCard, Wallet, AlertTriangle, Plus, Layers } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -10,62 +9,73 @@ import { Button } from '@/components/ui/Button';
 import { SkeletonDashboard } from '@/components/ui/Skeleton';
 import { ErrorState, EmptyState } from '@/components/ui/States';
 import { userService } from '@/services/user.service';
-import { paymentService } from '@/services/payment.service';
-import { vaultService } from '@/services/vault.service';
+import { reportsService } from '@/services/reports.service';
 import { useAuthStore } from '@/stores/authStore';
-import type { FranchiseUser, Payment, Vault } from '@/types';
+import type { FranchiseUser } from '@/types';
 import { formatCurrency, currentPeriodLabel, formatDate } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useQuery } from '@tanstack/react-query';
 
 export default function FranchiseDashboard() {
   const period = currentPeriodLabel();
   const { user } = useAuthStore();
-    const franchiseId = user?.franchiseId ?? '';
+  const franchiseId = user?.franchiseId ?? '';
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [users, setUsers] = useState<FranchiseUser[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [vaults, setVaults] = useState<Vault[]>([]);
+  const { data: stats, isLoading: statsLoading, isError: statsError, error: statsErr, refetch: refetchStats } = useQuery({
+    queryKey: ['reports', 'franchiseDashboard', franchiseId],
+    queryFn: () => reportsService.getFranchiseDashboard(franchiseId),
+    refetchInterval: 30_000,
+    enabled: !!franchiseId,
+    retry: 2,
+  });
 
-  const load = async () => {
-    if (!franchiseId) return;
-    setLoading(true); setError(null);
-    try {
-      const [u, p, v] = await Promise.all([
-        userService.getFranchiseUsers(franchiseId),
-        paymentService.getFranchisePayments(franchiseId),
-        vaultService.getAllVaults(),
-      ]);
-      setUsers(u); setPayments(p);
-      setVaults(v.filter(v => u.some(u => u.id === v.userId)));
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
-    finally { setLoading(false); }
+  const { data: paymentSummary, isLoading: psLoading, isError: psError, error: psErr, refetch: refetchPs } = useQuery({
+    queryKey: ['reports', 'paymentSummary', franchiseId],
+    queryFn: () => reportsService.getPaymentSummary(franchiseId),
+    refetchInterval: 30_000,
+    enabled: !!franchiseId,
+    retry: 2,
+  });
+
+  const { data: recentUsers, isLoading: ruLoading } = useQuery({
+    queryKey: ['franchiseUsers', 'recent', franchiseId],
+    queryFn: () => userService.getFranchiseUsers(franchiseId).then(users => users.slice(-6).reverse()),
+    enabled: !!franchiseId,
+    retry: 2,
+  });
+
+  const loading = statsLoading || psLoading;
+  const isError = statsError || psError;
+  const error = statsErr ? (statsErr instanceof Error ? statsErr.message : 'Failed to load')
+              : psErr ? (psErr instanceof Error ? psErr.message : 'Failed to load')
+              : null;
+
+  const retry = () => {
+    void refetchStats();
+    void refetchPs();
   };
 
-  useEffect(() => { void load(); }, [franchiseId]);
+  if (loading && !stats && !paymentSummary) return <SkeletonDashboard />;
+  if (isError && !stats && !paymentSummary) return <ErrorState description={error ?? 'Failed to load'} onRetry={retry} />;
 
-  if (loading) return <SkeletonDashboard />;
-  if (error) return <ErrorState description={error} onRetry={load} />;
+  const currentPeriodRow = paymentSummary?.find(row => row.periodLabel === period);
+  const paidThisMonth = currentPeriodRow?.paidCount ?? 0;
+  const pendingThisMonth = stats?.pendingPayments ?? currentPeriodRow?.pendingCount ?? 0;
+  const pendingDisplay = currentPeriodRow?.pendingCount ?? pendingThisMonth;
 
-  const activeUsers = users.filter(u => !['INACTIVE'].includes(u.status));
-  const winners = users.filter(u => u.hasWon);
-  const totalVault = vaults.reduce((s, v) => s + v.balance, 0);
-  const currentMonthPayments = payments.filter(p => p.periodLabel === period);
-  const paidThisMonth = currentMonthPayments.filter(p => p.status === 'Paid').length;
-  const pendingThisMonth = currentMonthPayments.filter(p => p.status === 'Pending').length;
+  const totalMembers = stats?.totalMembers ?? 0;
+  const totalWinners = stats?.totalWinners ?? 0;
+  const totalVault = stats?.totalVault ?? 0;
 
-  // Chart data: payment collections per period
-  const periodMap = new Map<string, { paid: number; pending: number }>();
-  for (const p of payments) {
-    const entry = periodMap.get(p.periodLabel) ?? { paid: 0, pending: 0 };
-    if (p.status === 'Paid') entry.paid++;
-    else if (p.status === 'Pending') entry.pending++;
-    periodMap.set(p.periodLabel, entry);
-  }
-  const chartData = Array.from(periodMap.entries())
+  const chartData = (paymentSummary ?? [])
     .slice(-6)
-    .map(([label, counts]) => ({ label: label.split(' ')[0], ...counts }));
+    .map(row => ({
+      label: row.periodLabel.split(' ')[0],
+      paid: row.paidCount,
+      pending: row.pendingCount,
+    }));
+
+  const members: FranchiseUser[] = recentUsers ?? [];
 
   return (
   <div className="w-full space-y-5 pb-6 sm:space-y-6">
@@ -122,11 +132,11 @@ export default function FranchiseDashboard() {
         </p>
 
         <p className="mt-1 text-2xl font-semibold tracking-tight text-neutral-950 sm:text-[28px]">
-          {activeUsers.length}
+          {totalMembers}
         </p>
 
         <p className="mt-1 truncate text-xs text-neutral-400">
-          {winners.length} {winners.length === 1 ? 'winner' : 'winners'}
+          {totalWinners} {totalWinners === 1 ? 'winner' : 'winners'}
         </p>
       </div>
 
@@ -168,7 +178,7 @@ export default function FranchiseDashboard() {
         </p>
 
         <p className="mt-1 text-xs text-neutral-400">
-          {pendingThisMonth} pending
+          {pendingDisplay} pending
         </p>
       </div>
 
@@ -185,7 +195,7 @@ export default function FranchiseDashboard() {
         </p>
 
         <p className="mt-1 text-2xl font-semibold tracking-tight text-neutral-950 sm:text-[28px]">
-          {winners.length}
+          {totalWinners}
         </p>
 
         <p className="mt-1 text-xs text-neutral-400">
@@ -195,7 +205,7 @@ export default function FranchiseDashboard() {
     </section>
 
     {/* ── Pending Payments ───────────────────────────────────────────────── */}
-    {pendingThisMonth > 0 && (
+    {pendingDisplay > 0 && (
       <div className="flex items-start gap-3 rounded-2xl border border-warning-200/80 bg-warning-50/70 px-4 py-3.5 sm:items-center sm:px-5">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-warning-100 text-warning-600">
           <AlertTriangle className="h-4 w-4" />
@@ -203,7 +213,7 @@ export default function FranchiseDashboard() {
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-warning-800">
-            {pendingThisMonth} payment{pendingThisMonth !== 1 ? 's' : ''} pending
+            {pendingDisplay} payment{pendingDisplay !== 1 ? 's' : ''} pending
           </p>
           <p className="mt-0.5 text-xs leading-5 text-warning-700/80">
             Pending payments affect eligibility for this month's auto-draw.
@@ -334,7 +344,17 @@ export default function FranchiseDashboard() {
         </CardHeader>
 
         <div className="divide-y divide-neutral-100 border-t border-neutral-100">
-          {users.slice(-6).reverse().map((u) => (
+          {ruLoading && members.length === 0 ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-5 py-3.5 sm:px-6 animate-pulse">
+                <div className="h-9 w-9 shrink-0 rounded-full bg-neutral-200" />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="h-3 w-1/2 rounded bg-neutral-200" />
+                  <div className="h-2.5 w-1/3 rounded bg-neutral-200" />
+                </div>
+              </div>
+            ))
+          ) : members.map((u) => (
             <div
               key={u.id}
               className="flex min-w-0 items-center gap-3 px-5 py-3.5 sm:px-6"
@@ -362,7 +382,7 @@ export default function FranchiseDashboard() {
             </div>
           ))}
 
-          {users.length === 0 && (
+          {!ruLoading && members.length === 0 && (
             <EmptyState
               title="No members yet"
               className="py-10"

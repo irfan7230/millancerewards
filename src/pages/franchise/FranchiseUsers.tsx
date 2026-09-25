@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -11,6 +11,7 @@ import {
   Phone,
 } from 'lucide-react';
 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -34,7 +35,6 @@ import { useToast } from '@/stores/uiStore';
 import type {
   FranchiseUser,
   Group,
-  Plan,
   NewUserInput,
 } from '@/types';
 
@@ -70,6 +70,10 @@ const userSchema = z.object({
   phone: z
     .string()
     .regex(/^\d{10}$/, 'Enter a 10-digit phone'),
+
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters'),
 
   altPhone: z
     .string()
@@ -144,19 +148,12 @@ export default function FranchiseUsers() {
   const franchiseId = user?.franchiseId ?? '';
 
   const toast = useToast();
-
-  const [users, setUsers] = useState<FranchiseUser[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [plans, setPlans] = useState<Plan[]>([]);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
 
   const {
     register,
@@ -175,6 +172,44 @@ export default function FranchiseUsers() {
 
   const selectedGroupId = watch('groupId');
 
+  const { data: users = [], isLoading: usersLoading, error: usersError } = useQuery({
+    queryKey: ['franchiseUsers', franchiseId],
+    queryFn: () => userService.getFranchiseUsers(franchiseId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!franchiseId,
+  });
+
+  const { data: groups = [], isLoading: groupsLoading } = useQuery({
+    queryKey: ['franchiseGroups', franchiseId],
+    queryFn: () => groupService.getFranchiseGroups(franchiseId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!franchiseId,
+  });
+
+  const { data: plans = [], isLoading: plansLoading } = useQuery({
+    queryKey: ['franchisePlans', franchiseId],
+    queryFn: () => planService.getFranchisePlans(franchiseId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!franchiseId,
+  });
+
+  const { data: groupTypes = [], isLoading: groupTypesLoading } = useQuery({
+    queryKey: ['groupTypes'],
+    queryFn: () => groupService.getGroupTypes(),
+    staleTime: 15_000,
+    retry: 2,
+  });
+
+  const loading = usersLoading || groupsLoading || plansLoading || groupTypesLoading;
+  const error = usersError
+    ? usersError instanceof Error
+      ? usersError.message
+      : 'Failed to load members'
+    : null;
+
   const availablePlans = useMemo(
     () =>
       plans.filter(
@@ -183,7 +218,7 @@ export default function FranchiseUsers() {
     [plans, selectedGroupId],
   );
 
-  useEffect(() => {
+  React.useEffect(() => {
     const currentPlan = watch('planId');
 
     if (
@@ -197,58 +232,19 @@ export default function FranchiseUsers() {
   }, [selectedGroupId, availablePlans, setValue, watch]);
 
   // ===========================================================================
-  // Load data
+  // Create member mutation with optimistic update
   // ===========================================================================
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const [u, g, p] = await Promise.all([
-        userService.getFranchiseUsers(franchiseId),
-        groupService.getFranchiseGroups(franchiseId),
-        planService.getFranchisePlans(franchiseId),
-      ]);
-
-      setUsers(u);
-      setGroups(g);
-      setPlans(p);
-    } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : 'Failed to load members',
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (franchiseId) {
-      void load();
-    }
-  }, [franchiseId]);
-
-  // ===========================================================================
-  // Create member
-  // ===========================================================================
-
-  const onSubmit = async (data: UserFormData) => {
-    setCreating(true);
-
-    try {
+  const createUserMutation = useMutation({
+    mutationFn: async (data: UserFormData) => {
       const group = groups.find(
         (g) => g.id === data.groupId,
       );
 
-      const groupType = groupService
-        .getGroupTypes()
-        .find(
-          (type) =>
-            type.id === group?.groupTypeId,
-        );
+      const groupType = groupTypes.find(
+        (type) =>
+          type.id === group?.groupTypeId,
+      );
 
       if (
         group &&
@@ -270,18 +266,69 @@ export default function FranchiseUsers() {
         data.groupId,
       );
 
-      setUsers((prev) => [...prev, newUser]);
+      return { newUser, groupId: data.groupId };
+    },
+    onMutate: async (data: UserFormData) => {
+      await queryClient.cancelQueries({ queryKey: ['franchiseUsers', franchiseId] });
+      await queryClient.cancelQueries({ queryKey: ['franchiseGroups', franchiseId] });
 
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === data.groupId
-            ? {
-                ...g,
-                memberCount: g.memberCount + 1,
-              }
-            : g,
-        ),
+      const previousUsers = queryClient.getQueryData<FranchiseUser[]>(['franchiseUsers', franchiseId]);
+      const previousGroups = queryClient.getQueryData<Group[]>(['franchiseGroups', franchiseId]);
+
+      const tempId = `temp-${Date.now()}`;
+      const optimisticUser: FranchiseUser = {
+        id: tempId,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        groupId: data.groupId,
+        planId: data.planId,
+        franchiseId,
+        status: 'ACTIVE',
+        hasWon: false,
+        joinedAt: new Date().toISOString(),
+        dob: data.dob,
+        gender: data.gender,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        pincode: data.pincode,
+        pan: data.pan.toUpperCase(),
+        idLast4: data.idLast4,
+        nomineeName: data.nomineeName,
+        nomineeRelation: data.nomineeRelation,
+        altPhone: data.altPhone,
+      };
+
+      queryClient.setQueryData<FranchiseUser[]>(
+        ['franchiseUsers', franchiseId],
+        (old) => (old ? [...old, optimisticUser] : [optimisticUser]),
       );
+
+      queryClient.setQueryData<Group[]>(
+        ['franchiseGroups', franchiseId],
+        (old) =>
+          old
+            ? old.map((g) =>
+                g.id === data.groupId
+                  ? { ...g, memberCount: g.memberCount + 1 }
+                  : g,
+              )
+            : old,
+      );
+
+      return { previousUsers, previousGroups };
+    },
+    onSuccess: ({ newUser }) => {
+      queryClient.setQueryData<FranchiseUser[]>(
+        ['franchiseUsers', franchiseId],
+        (old) =>
+          old
+            ? old.map((u) => (u.id.startsWith('temp-') ? newUser : u))
+            : [newUser],
+      );
+
+      queryClient.invalidateQueries({ queryKey: ['franchiseGroups', franchiseId] });
 
       toast.success(
         'Member added',
@@ -290,16 +337,25 @@ export default function FranchiseUsers() {
 
       setDialogOpen(false);
       reset();
-    } catch (e) {
+    },
+    onError: (err, _variables, context) => {
+      if (context?.previousUsers) {
+        queryClient.setQueryData(['franchiseUsers', franchiseId], context.previousUsers);
+      }
+      if (context?.previousGroups) {
+        queryClient.setQueryData(['franchiseGroups', franchiseId], context.previousGroups);
+      }
       toast.error(
         'Failed',
-        e instanceof Error
-          ? e.message
+        err instanceof Error
+          ? err.message
           : 'Unknown error',
       );
-    } finally {
-      setCreating(false);
-    }
+    },
+  });
+
+  const onSubmit = (data: UserFormData) => {
+    void createUserMutation.mutate(data);
   };
 
   const openDialog = () => {
@@ -520,7 +576,12 @@ export default function FranchiseUsers() {
         {!loading && error && (
           <ErrorState
             description={error}
-            onRetry={load}
+            onRetry={() => {
+              void queryClient.invalidateQueries({ queryKey: ['franchiseUsers', franchiseId] });
+              void queryClient.invalidateQueries({ queryKey: ['franchiseGroups', franchiseId] });
+              void queryClient.invalidateQueries({ queryKey: ['franchisePlans', franchiseId] });
+              void queryClient.invalidateQueries({ queryKey: ['groupTypes'] });
+            }}
           />
         )}
 
@@ -806,6 +867,17 @@ export default function FranchiseUsers() {
 
             </div>
 
+            <div className="mt-3">
+              <Input
+                {...register('password')}
+                type="password"
+                label="Login Password"
+                placeholder="Minimum 8 characters"
+                helperText="Member will use this to log in to their account"
+                error={errors.password?.message}
+              />
+            </div>
+
           </FormSection>
 
           <FormSection title="Address">
@@ -987,7 +1059,7 @@ export default function FranchiseUsers() {
 
           <Button
             variant="primary"
-            loading={creating}
+            loading={createUserMutation.isPending}
             onClick={handleSubmit(onSubmit)}
           >
             Add Member

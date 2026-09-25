@@ -23,10 +23,11 @@ import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/stores/uiStore';
 import { useCheckout } from '@/components/payments/CheckoutProvider';
 import { cn, currentPeriodLabel } from '@/lib/utils';
-import type { Payment, Draw, Vault, Plan } from '@/types';
+import type { Payment, Draw, PaymentStatus } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { cmsService } from '@/services/cms.service';
 import type { DashboardBanner } from '@/services/cms.service';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // ── Promo banners (uses existing project imagery + real offer copy) ──────────
 // ── Quick actions (app-grid) ─────────────────────────────────────────────────
@@ -43,41 +44,75 @@ export default function UserDashboard() {
   const period = currentPeriodLabel();
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
-    const toast = useToast();
+  const franchiseId = user?.franchiseId ?? '';
+  const planId = user?.planId;
+  const groupId = user?.groupId;
+  const toast = useToast();
   const checkout = useCheckout();
+  const queryClient = useQueryClient();
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [draws, setDraws] = useState<Draw[]>([]);
-  const [vault, setVault] = useState<Vault | null>(null);
-  const [plan, setPlan] = useState<Plan | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
-  const [banners, setBanners] = useState<DashboardBanner[]>([]);
 
-  const load = async () => {
-    if (!userId) return;
-    setLoading(true); setError(null);
-    try {
-      const [p, d, v, pl, b] = await Promise.all([
-        paymentService.getUserPayments(userId),
-        drawService.getFranchiseDraws(user!.franchiseId!),
-        vaultService.getVault(userId),
-        user?.planId ? planService.getPlan(user.planId) : Promise.resolve(null),
-        cmsService.getDashboardBanners({ franchiseId: user?.franchiseId, groupId: user?.groupId, planId: user?.planId }),
-      ]);
-      setPayments(p);
-      setDraws(d.filter(dr => dr.status === 'completed'));
-      setVault(v);
-      setPlan(pl);
-      setBanners(b);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
-    finally { setLoading(false); }
-  };
+  const { data: payments = [], isLoading: paymentsLoading } = useQuery({
+    queryKey: ['user', 'payments', userId],
+    queryFn: () => paymentService.getUserPayments(userId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!userId,
+    refetchInterval: 60_000,
+  });
 
-  useEffect(() => { void load(); }, [userId]);
+  const { data: drawsRaw = [], isLoading: drawsLoading } = useQuery({
+    queryKey: ['user', 'draws', userId],
+    queryFn: () => drawService.getFranchiseDraws(franchiseId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!franchiseId,
+    refetchInterval: 60_000,
+  });
+  const draws = drawsRaw.filter((dr: Draw) => dr.status === 'completed');
 
-  // Launch the Razorpay-style checkout; commit the payment only on success.
+  const { data: vault = null, isLoading: vaultLoading } = useQuery({
+    queryKey: ['user', 'vault', userId],
+    queryFn: () => vaultService.getVault(userId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!userId,
+    refetchInterval: 60_000,
+  });
+
+  const { data: plan = null, isLoading: planLoading } = useQuery({
+    queryKey: ['user', 'plan', userId, planId],
+    queryFn: () => planService.getPlan(planId!),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!userId && !!planId,
+    refetchInterval: 60_000,
+  });
+
+  const { data: banners = [], isLoading: bannersLoading } = useQuery({
+    queryKey: ['user', 'banners', userId],
+    queryFn: () => cmsService.getDashboardBanners({ franchiseId, groupId, planId }),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!userId,
+    refetchInterval: 60_000,
+  });
+
+  const processPaymentMutation = useMutation({
+    mutationFn: ({ paymentId, status }: { paymentId: string; status: PaymentStatus }) =>
+      paymentService.processPayment(paymentId, status),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['user', 'payments', userId], (prev: Payment[] | undefined) =>
+        prev?.map((p) => (p.id === updated.id ? updated : p)) ?? [updated],
+      );
+      queryClient.invalidateQueries({ queryKey: ['user', 'vault', userId] });
+    },
+  });
+
+  const loading = paymentsLoading || drawsLoading || vaultLoading || planLoading || bannersLoading;
+  const error = null;
+
   const payViaCheckout = (payment: Payment) => {
     checkout.open({
       amount: payment.amount,
@@ -87,8 +122,7 @@ export default function UserDashboard() {
       onSuccess: async () => {
         setPaying(payment.id);
         try {
-          const updated = await paymentService.processPayment(payment.id, 'Paid');
-          setPayments(prev => prev.map(p => p.id === payment.id ? updated : p));
+          await processPaymentMutation.mutateAsync({ paymentId: payment.id, status: 'Paid' });
           toast.success('Payment successful', `${formatCurrency(payment.amount)} paid for ${payment.periodLabel}`);
         } catch (e) { toast.error('Payment failed', e instanceof Error ? e.message : 'Unknown'); }
         finally { setPaying(null); }
@@ -97,7 +131,13 @@ export default function UserDashboard() {
   };
 
   if (loading) return <SkeletonUserHome />;
-  if (error) return <ErrorState description={error} onRetry={load} />;
+  if (error) return <ErrorState description={error} onRetry={() => {
+    queryClient.invalidateQueries({ queryKey: ['user', 'payments', userId] });
+    queryClient.invalidateQueries({ queryKey: ['user', 'draws', userId] });
+    queryClient.invalidateQueries({ queryKey: ['user', 'vault', userId] });
+    queryClient.invalidateQueries({ queryKey: ['user', 'plan', userId, planId] });
+    queryClient.invalidateQueries({ queryKey: ['user', 'banners', userId] });
+  }} />;
 
   const nextPayment = payments.find(p => p.status === 'Pending');
   const winCount = draws.flatMap(d => d.winners).filter(w => w.userId === userId).length;

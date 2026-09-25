@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import {
   Users,
   Wallet,
@@ -13,9 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/Card';
 import { PageLoader, ErrorState } from '@/components/ui/States';
-import { paymentService } from '@/services/payment.service';
-import { userService } from '@/services/user.service';
-import { vaultService } from '@/services/vault.service';
+import { reportsService } from '@/services/reports.service';
 import { useAuthStore } from '@/stores/authStore';
 import {
   BarChart,
@@ -29,109 +26,65 @@ import {
   Line,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
 
 export default function FranchiseReports() {
   const { user } = useAuthStore();
   const franchiseId = user?.franchiseId ?? '';
 
-  const [data, setData] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: stats, isLoading: statsLoading, isError: statsError, error: statsErr, refetch: refetchStats } = useQuery({
+    queryKey: ['reports', 'franchiseDashboard', franchiseId],
+    queryFn: () => reportsService.getFranchiseDashboard(franchiseId),
+    refetchInterval: 30_000,
+    enabled: !!franchiseId,
+    retry: 2,
+  });
 
-  useEffect(() => {
-    if (!franchiseId) return;
+  const { data: paymentSummary, isLoading: psLoading, isError: psError, error: psErr, refetch: refetchPs } = useQuery({
+    queryKey: ['reports', 'paymentSummary', franchiseId],
+    queryFn: () => reportsService.getPaymentSummary(franchiseId),
+    refetchInterval: 30_000,
+    enabled: !!franchiseId,
+    retry: 2,
+  });
 
-    (async () => {
-      setLoading(true);
-      setError(null);
+  const loading = statsLoading || psLoading;
+  const isError = statsError || psError;
+  const error = statsErr ? (statsErr instanceof Error ? statsErr.message : 'Failed')
+              : psErr ? (psErr instanceof Error ? psErr.message : 'Failed')
+              : null;
 
-      try {
-        const [users, payments, allVaults] = await Promise.all([
-          userService.getFranchiseUsers(franchiseId),
-          paymentService.getFranchisePayments(franchiseId),
-          vaultService.getAllVaults(),
-        ]);
-
-        const userIds = new Set(users.map(u => u.id));
-        const vaults = allVaults.filter(v => userIds.has(v.userId));
-
-        const periodMap = new Map<
-          string,
-          { paid: number; pending: number; amount: number }
-        >();
-
-        for (const p of payments) {
-          const entry = periodMap.get(p.periodLabel) ?? {
-            paid: 0,
-            pending: 0,
-            amount: 0,
-          };
-
-          if (p.status === 'Paid') {
-            entry.paid++;
-            entry.amount += p.amount;
-          } else if (p.status === 'Pending') {
-            entry.pending++;
-          }
-
-          periodMap.set(p.periodLabel, entry);
-        }
-
-        const chartData = Array.from(periodMap.entries())
-          .slice(-6)
-          .map(([label, values]) => ({
-            label: label.split(' ')[0].slice(0, 3),
-            ...values,
-          }));
-
-        const totalRevenue = payments
-          .filter(p => p.status === 'Paid')
-          .reduce((sum, p) => sum + p.amount, 0);
-
-        const totalVault = vaults.reduce(
-          (sum, vault) => sum + vault.balance,
-          0,
-        );
-
-        const winners = users.filter(u => u.hasWon).length;
-
-        setData({
-          users,
-          payments,
-          vaults,
-          chartData,
-          totalRevenue,
-          totalVault,
-          winners,
-        });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [franchiseId]);
+  const retry = () => {
+    void refetchStats();
+    void refetchPs();
+  };
 
   if (loading) {
     return <PageLoader label="Building reports…" />;
   }
 
-  if (error || !data) {
-    return <ErrorState description={error ?? 'No data'} />;
+  if (isError || (!stats && !paymentSummary)) {
+    return <ErrorState description={error ?? 'No data'} onRetry={retry} />;
   }
 
-  const {
-    users,
-    chartData,
-    totalRevenue,
-    totalVault,
-    winners,
-  } = data as any;
+  const totalMembers = stats?.totalMembers ?? 0;
+  const totalRevenue = stats?.totalRevenue ?? 0;
+  const totalVault = stats?.totalVault ?? 0;
+  const winners = stats?.totalWinners ?? 0;
 
-  const stats = [
+  const chartData = (paymentSummary ?? [])
+    .slice(-6)
+    .map(row => ({
+      label: row.periodLabel.split(' ')[0].slice(0, 3),
+      paid: row.paidCount,
+      pending: row.pendingCount,
+      amount: row.totalCollected,
+    }));
+
+  const statsCards = [
     {
       label: 'Total Members',
-      value: users.length.toLocaleString(),
+      value: totalMembers.toLocaleString(),
       icon: Users,
       iconClass: 'text-brand-600 bg-brand-50 border-brand-100',
     },
@@ -174,7 +127,7 @@ export default function FranchiseReports() {
 
       {/* KPI cards */}
       <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        {stats.map(({ label, value, icon: Icon, iconClass }) => (
+        {statsCards.map(({ label, value, icon: Icon, iconClass }) => (
           <article
           key={label}
           className="

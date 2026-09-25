@@ -49,9 +49,9 @@ export default function FranchiseGroup() {
       setLoading(true); setError(null);
       try {
         const g = await groupService.getGroup(id);
-        const types = groupService.getGroupTypes();
+        const types = await groupService.getGroupTypes();
         const gt = types.find(t => t.id === g.groupTypeId) ?? null;
-        const users = await userService.getUsersByGroup(id);
+        const users = await userService.getUsersByGroup(id, g.franchiseId);
         setGroup(g); setGroupType(gt); setMembers(users);
       } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
       finally { setLoading(false); }

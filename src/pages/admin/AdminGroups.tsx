@@ -3,8 +3,9 @@
 // Search (group name) + franchise filter. Collapsible franchise sections;
 // mobile cards, desktop tables. Shows occupancy vs capacity.
 // =============================================================================
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Layers } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { SkeletonTable } from '@/components/ui/Skeleton';
@@ -17,26 +18,30 @@ import { franchiseService } from '@/services/franchise.service';
 import type { Group, Franchise, GroupType } from '@/types';
 import { formatDate } from '@/lib/utils';
 
-export default function AdminGroups() {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [franchises, setFranchises] = useState<Franchise[]>([]);
-  const [groupTypes, setGroupTypes] = useState<GroupType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface GroupsData { groups: Group[]; franchises: Franchise[]; groupTypes: GroupType[]; }
 
+export default function AdminGroups() {
   const [search, setSearch] = useState('');
   const [franchiseFilter, setFranchiseFilter] = useState('all');
 
-  const load = async () => {
-    setLoading(true); setError(null);
-    try {
-      const [g, f] = await Promise.all([groupService.getAllGroups(), franchiseService.getFranchises()]);
-      setGroups(g); setFranchises(f);
-      setGroupTypes(groupService.getGroupTypes());
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, []);
+  const { data, isLoading: loading, error: queryError, refetch: load } = useQuery({
+    queryKey: ['adminGroups'],
+    queryFn: async (): Promise<GroupsData> => {
+      const [g, f, gt] = await Promise.all([
+        groupService.getAllGroups(),
+        franchiseService.getFranchises(),
+        groupService.getGroupTypes(),
+      ]);
+      return { groups: g, franchises: f, groupTypes: gt };
+    },
+    staleTime: 15_000,
+    retry: 2,
+  });
+
+  const groups = data?.groups ?? [];
+  const franchises = data?.franchises ?? [];
+  const groupTypes = data?.groupTypes ?? [];
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed to load') : null;
 
   const gtMap = useMemo(() => new Map(groupTypes.map(t => [t.id, t])), [groupTypes]);
   const q = search.trim().toLowerCase();

@@ -44,14 +44,14 @@ export default function AdminFranchise() {
     if (!id) return;
     setLoading(true); setError(null);
     try {
-      const [f, u, g, p] = await Promise.all([
+      const [f, u, g, p, gt] = await Promise.all([
         franchiseService.getFranchise(id),
         userService.getFranchiseUsers(id),
         groupService.getFranchiseGroups(id),
         planService.getFranchisePlans(id),
+        groupService.getGroupTypes(),
       ]);
-      setFranchise(f); setUsers(u); setGroups(g); setPlans(p);
-      setGroupTypes(groupService.getGroupTypes());
+      setFranchise(f); setUsers(u); setGroups(g); setPlans(p); setGroupTypes(gt);
       // Sum member vault balances for this franchise.
       const vaults = await vaultService.getFranchiseVaults(id, u.map(x => x.id));
       setTotalVault(vaults.reduce((s, v) => s + v.balance, 0));

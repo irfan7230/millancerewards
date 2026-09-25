@@ -22,6 +22,7 @@ const schema = z.object({
   email: z.string().email('Valid email required'),
   phone: z.string().regex(/^\d{10}$/, 'Enter a 10-digit phone'),
   city: z.string().min(2, 'City required'),
+  ownerPassword: z.string().min(8, 'Password must be at least 8 characters').optional(),
   status: z.enum(['active', 'suspended']),
 });
 type FormData = z.infer<typeof schema>;
@@ -66,6 +67,11 @@ export function FranchiseEditor({ open, franchise, onClose, onSaved }: Props) {
         toast.success('Franchise updated', updated.name);
         onSaved(updated, 'edit');
       } else {
+        // Create mode: password is required
+        if (!data.ownerPassword) {
+          toast.error('Create failed', 'Owner password is required');
+          return;
+        }
         const created = await franchiseService.createFranchise(data as NewFranchiseInput);
         // status defaults to active on create; apply chosen status if suspended.
         const final = data.status === 'suspended'
@@ -98,6 +104,16 @@ export function FranchiseEditor({ open, franchise, onClose, onSaved }: Props) {
           <Input {...register('phone')} label="Phone" placeholder="9876543210" error={errors.phone?.message} />
           <Input {...register('city')} label="City" placeholder="Mumbai" error={errors.city?.message} />
         </div>
+        {!isEdit && (
+          <Input
+            {...register('ownerPassword')}
+            type="password"
+            label="Owner Password"
+            placeholder="Minimum 8 characters"
+            helperText="The owner will use this to log in"
+            error={errors.ownerPassword?.message}
+          />
+        )}
         <Select {...register('status')} label="Status" error={errors.status?.message}>
           <option value="active">Active</option>
           <option value="suspended">Suspended</option>

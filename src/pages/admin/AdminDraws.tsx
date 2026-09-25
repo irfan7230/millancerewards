@@ -1,6 +1,6 @@
 // Admin Draws
-import { useEffect, useState } from 'react';
 import { Trophy } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { DrawStatusBadge } from '@/components/ui/Badge';
 import { SkeletonTable } from '@/components/ui/Skeleton';
@@ -11,21 +11,22 @@ import { franchiseService } from '@/services/franchise.service';
 import type { Draw, Franchise } from '@/types';
 import { formatDate } from '@/lib/utils';
 
-export default function AdminDraws() {
-  const [draws, setDraws] = useState<Draw[]>([]);
-  const [franchises, setFranchises] = useState<Franchise[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface DrawsData { draws: Draw[]; franchises: Franchise[]; }
 
-  const load = async () => {
-    setLoading(true); setError(null);
-    try {
+export default function AdminDraws() {
+  const { data, isLoading: loading, error: queryError, refetch: load } = useQuery({
+    queryKey: ['adminDraws'],
+    queryFn: async (): Promise<DrawsData> => {
       const [d, f] = await Promise.all([drawService.getAllDraws(), franchiseService.getFranchises()]);
-      setDraws(d); setFranchises(f);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, []);
+      return { draws: d, franchises: f };
+    },
+    staleTime: 15_000,
+    retry: 2,
+  });
+
+  const draws = data?.draws ?? [];
+  const franchises = data?.franchises ?? [];
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed') : null;
   const fMap = new Map(franchises.map(f => [f.id, f.name]));
   const sorted = [...draws].sort((a, b) => b.executedAt?.localeCompare(a.executedAt ?? '') ?? 0);
   const { page, setPage, pageItems, pageCount, total, range } = usePagination(sorted, 15);

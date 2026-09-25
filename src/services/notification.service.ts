@@ -1,15 +1,6 @@
-// =============================================================================
-// Notification Service
-// =============================================================================
 import type { NotificationEvent, NotificationKind, Role } from '@/types';
-import { persistence, KEYS } from '@/lib/persistence';
-
-function getAll(): NotificationEvent[] {
-  return persistence.get<NotificationEvent[]>(KEYS.NOTIFICATIONS) ?? [];
-}
-function saveAll(d: NotificationEvent[]): void {
-  persistence.set(KEYS.NOTIFICATIONS, d);
-}
+import { api } from '@/lib/api/client';
+import { useAuthStore } from '@/stores/authStore';
 
 interface EmitInput {
   audienceRole: Role;
@@ -20,61 +11,48 @@ interface EmitInput {
 }
 
 export const notificationService = {
-  async emit(input: EmitInput): Promise<NotificationEvent> {
-    const notification: NotificationEvent = {
-      id: `ntf-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      ...input,
-      createdAt: new Date().toISOString(),
-      read: false,
-    };
-    saveAll([...getAll(), notification]);
-    return notification;
+  async emit(_input: EmitInput): Promise<NotificationEvent> {
+    throw new Error(
+      'Client-side notification emission is not supported. Notifications are generated and broadcast by the backend automatically as part of draw, payment, and voucher workflows.',
+    );
   },
 
-  async getForUser(userId: string, franchiseId?: string): Promise<NotificationEvent[]> {
-    return getAll().filter(
-      n =>
-        (n.audienceRole === 'user' && n.userId === userId) ||
+  async getForUser(_userId: string, franchiseId?: string): Promise<NotificationEvent[]> {
+    const res = await api.get<NotificationEvent[]>('/core/notifications/user');
+    const state = useAuthStore.getState();
+    const currentUser = state.user;
+    return res.filter(
+      (n) =>
+        (n.audienceRole === 'user' && (!n.userId || !currentUser || n.userId === currentUser.id)) ||
         (n.audienceRole === 'franchise' && n.franchiseId === franchiseId && !n.userId),
     );
   },
 
   async getForFranchise(franchiseId: string): Promise<NotificationEvent[]> {
-    return getAll().filter(
-      n => n.audienceRole === 'franchise' && n.franchiseId === franchiseId,
-    );
+    const res = await api.get<NotificationEvent[]>('/core/notifications/admin');
+    return res.filter((n) => n.audienceRole === 'franchise' && n.franchiseId === franchiseId);
   },
 
   async getForAdmin(): Promise<NotificationEvent[]> {
-    return getAll().filter(n => n.audienceRole === 'super_admin');
+    const res = await api.get<NotificationEvent[]>('/core/notifications/admin');
+    return res.filter((n) => n.audienceRole === 'super_admin');
   },
 
   async markRead(id: string): Promise<void> {
-    const all = getAll();
-    const idx = all.findIndex(n => n.id === id);
-    if (idx !== -1) {
-      all[idx] = { ...all[idx], read: true };
-      saveAll(all);
-    }
+    await api.patch<void>(`/core/notifications/${id}/read`);
   },
 
   async markAllRead(userId?: string, franchiseId?: string): Promise<void> {
-    const all = getAll();
-    const updated = all.map(n => {
-      if (userId && n.userId === userId) return { ...n, read: true };
-      if (franchiseId && n.franchiseId === franchiseId && !n.userId) return { ...n, read: true };
-      return n;
-    });
-    saveAll(updated);
+    let list: NotificationEvent[] = [];
+    if (userId) list = await notificationService.getForUser(userId, franchiseId);
+    else if (franchiseId) list = await notificationService.getForFranchise(franchiseId);
+    await Promise.all(list.filter((n) => !n.read).map((n) => notificationService.markRead(n.id)));
   },
 
   async getUnreadCount(userId?: string, franchiseId?: string): Promise<number> {
-    const all = getAll();
-    return all.filter(n => {
-      if (n.read) return false;
-      if (userId) return n.userId === userId || (n.audienceRole === 'franchise' && n.franchiseId === franchiseId);
-      if (franchiseId) return n.franchiseId === franchiseId;
-      return false;
-    }).length;
+    let list: NotificationEvent[] = [];
+    if (userId) list = await notificationService.getForUser(userId, franchiseId);
+    else if (franchiseId) list = await notificationService.getForFranchise(franchiseId);
+    return list.filter((n) => !n.read).length;
   },
 };

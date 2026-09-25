@@ -1,40 +1,34 @@
 // =============================================================================
 // User Vault — Ledger and balance tracking
 // =============================================================================
-import { useEffect, useState } from 'react';
 import { Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/States';
 import { Pagination, usePagination } from '@/components/ui/Pagination';
 import { vaultService } from '@/services/vault.service';
 import { useAuthStore } from '@/stores/authStore';
-import type { Vault } from '@/types';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export default function UserVault() {
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
+  const queryClient = useQueryClient();
 
-  const [vault, setVault] = useState<Vault | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!userId) return;
-    (async () => {
-      setLoading(true); setError(null);
-      try { setVault(await vaultService.getVault(userId)); }
-      catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
-      finally { setLoading(false); }
-    })();
-  }, [userId]);
+  const { data: vault = null, isLoading: loading, error } = useQuery({
+    queryKey: ['user', 'vault', userId],
+    queryFn: () => vaultService.getVault(userId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!userId,
+  });
 
   // Compute + paginate before any early return so hook order stays stable.
   const sortedTx = vault ? [...vault.transactions].reverse() : [];
   const { page, setPage, pageItems, pageCount, total, range } = usePagination(sortedTx, 10);
 
   if (loading) return <div className="space-y-4">{[1,2,3].map(i => <SkeletonCard key={i} />)}</div>;
-  if (error || !vault) return <ErrorState description={error ?? 'Vault not found'} />;
+  if (error || !vault) return <ErrorState description={(error instanceof Error ? error.message : null) ?? 'Vault not found'} onRetry={() => queryClient.invalidateQueries({ queryKey: ['user', 'vault', userId] })} />;
 
   return (
   <div className="space-y-6 pb-8">

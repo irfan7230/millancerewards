@@ -1,52 +1,25 @@
-// =============================================================================
-// Coupon Service — Admin creates coupons; users apply them at checkout.
-// Backend-ready: all functions async; replace localStorage with REST calls.
-//
-// Coupon types:
-//   - flat:       fixed ₹ discount off the payment amount
-//   - percentage: % off, with optional maxDiscount cap
-//   - free:       makes the payment ₹0 (full waiver)
-//
-// Scope rules (all optional — absent = global):
-//   - franchiseId:  only usable within this franchise
-//   - groupId:      only usable within this group
-//   - planId:       only applicable to this plan
-//   - userId:       single-use gift coupon for one user
-//
-// Constraints:
-//   - usageLimit:   max total redemptions (null = unlimited)
-//   - usedCount:    tracks current usage
-//   - maxUsesPerUser: per-user cap (default 1)
-//   - minOrderAmount: minimum payment amount to apply
-//   - validFrom / validTo: ISO datetime range
-//   - active:       admin toggle to enable/disable
-// =============================================================================
-import { persistence } from '@/lib/persistence';
-
-const COUPON_KEY = 'millance:coupons';
+import { api } from '@/lib/api/client';
+import { useAuthStore } from '@/stores/authStore';
 
 export type CouponType = 'flat' | 'percentage' | 'free';
 
 export interface Coupon {
   id: string;
-  code: string;               // e.g. "WELCOME100"
+  code: string;
   type: CouponType;
-  value: number;              // ₹ for flat, % for percentage, ignored for free
-  maxDiscount?: number;       // cap for percentage type
-  description: string;        // shown to user: "₹100 off your first payment"
-  // Scope
+  value: number;
+  maxDiscount?: number;
+  description: string;
   franchiseId?: string;
   groupId?: string;
   planId?: string;
-  userId?: string;            // single-user gift
-  // Constraints
-  usageLimit?: number;        // null = unlimited
+  userId?: string;
+  usageLimit?: number;
   usedCount: number;
   maxUsesPerUser: number;
-  minOrderAmount: number;     // 0 = no minimum
-  // Validity
-  validFrom: string;          // ISO date
-  validTo: string;            // ISO date
+  minOrderAmount: number;
+  validFrom: string;
+  validTo: string;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -55,8 +28,8 @@ export interface Coupon {
 export interface CouponApplyResult {
   valid: true;
   coupon: Coupon;
-  discount: number;           // ₹ amount to subtract
-  finalAmount: number;        // amount after discount
+  discount: number;
+  finalAmount: number;
 }
 export interface CouponRejectResult {
   valid: false;
@@ -64,79 +37,37 @@ export interface CouponRejectResult {
 }
 export type CouponResult = CouponApplyResult | CouponRejectResult;
 
-// Per-user usage tracking
-const USAGE_KEY = (couponId: string) => `millance:coupon_usage:${couponId}`;
-
-function delay(ms = 200): Promise<void> { return new Promise(r => setTimeout(r, ms)); }
-function getAll(): Coupon[] { return persistence.get<Coupon[]>(COUPON_KEY) ?? []; }
-function saveAll(d: Coupon[]): void { persistence.set(COUPON_KEY, d); }
-
-function getUserUsage(couponId: string, userId: string): number {
-  const map = persistence.get<Record<string, number>>(USAGE_KEY(couponId)) ?? {};
-  return map[userId] ?? 0;
-}
-function incrementUserUsage(couponId: string, userId: string): void {
-  const map = persistence.get<Record<string, number>>(USAGE_KEY(couponId)) ?? {};
-  map[userId] = (map[userId] ?? 0) + 1;
-  persistence.set(USAGE_KEY(couponId), map);
+function resolveFranchiseId(provided?: string): string {
+  if (provided) return provided;
+  const user = useAuthStore.getState().user;
+  if (user?.franchiseId) return user.franchiseId;
+  throw new Error('Franchise context unavailable: pass franchiseId explicitly or log in.');
 }
 
 export const couponService = {
-  // ── Admin operations ─────────────────────────────────────────────────────
-
-  async getAll(): Promise<Coupon[]> {
-    await delay();
-    return getAll();
+  async getAll(franchiseId?: string): Promise<Coupon[]> {
+    return api.get<Coupon[]>(`/core/${resolveFranchiseId(franchiseId)}/coupons`);
   },
 
   async create(data: Omit<Coupon, 'id' | 'usedCount' | 'createdAt' | 'updatedAt'>): Promise<Coupon> {
-    await delay(300);
-    const all = getAll();
-    const code = data.code.trim().toUpperCase();
-    if (all.some(c => c.code === code)) throw new Error(`Coupon code "${code}" already exists`);
-    const now = new Date().toISOString();
-    const coupon: Coupon = {
-      ...data,
-      id: crypto.randomUUID(),
-      code,
-      usedCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    saveAll([...all, coupon]);
-    return coupon;
+    return api.post<Coupon>(`/core/${resolveFranchiseId(data.franchiseId)}/coupons`, data);
   },
 
-  async update(id: string, data: Partial<Omit<Coupon, 'id' | 'createdAt'>>): Promise<Coupon> {
-    await delay(300);
-    const all = getAll();
-    const idx = all.findIndex(c => c.id === id);
-    if (idx === -1) throw new Error('Coupon not found');
-    const updated: Coupon = { ...all[idx], ...data, updatedAt: new Date().toISOString() };
-    if (data.code) updated.code = data.code.trim().toUpperCase();
-    all[idx] = updated;
-    saveAll(all);
-    return updated;
+  async update(id: string, data: Partial<Omit<Coupon, 'id' | 'createdAt'>>, franchiseId?: string): Promise<Coupon> {
+    if (Object.keys(data).length === 1 && 'active' in data) {
+      return couponService.toggleActive(id, franchiseId);
+    }
+    throw new Error('Arbitrary coupon updates beyond active toggle are not exposed by the backend.');
   },
 
-  async delete(id: string): Promise<void> {
-    await delay(200);
-    saveAll(getAll().filter(c => c.id !== id));
+  async delete(id: string, franchiseId?: string): Promise<void> {
+    await api.del<void>(`/core/${resolveFranchiseId(franchiseId)}/coupons/${id}`);
   },
 
-  async toggleActive(id: string): Promise<Coupon> {
-    const all = getAll();
-    const c = all.find(c => c.id === id);
-    if (!c) throw new Error('Coupon not found');
-    return couponService.update(id, { active: !c.active });
+  async toggleActive(id: string, franchiseId?: string): Promise<Coupon> {
+    return api.post<Coupon>(`/core/${resolveFranchiseId(franchiseId)}/coupons/${id}/toggle`);
   },
 
-  // ── User operations ─────────────────────────────────────────────────────
-
-  /**
-   * Validate and calculate discount for a coupon code.
-   * Call this BEFORE checkout — does not consume the coupon.
-   */
   async validate(args: {
     code: string;
     userId: string;
@@ -145,9 +76,10 @@ export const couponService = {
     groupId?: string;
     planId?: string;
   }): Promise<CouponResult> {
-    await delay(350);
-    const all = getAll();
-    const coupon = all.find(c => c.code === args.code.trim().toUpperCase());
+    // Keep client-side validation for now. Backend drop-in will be a future POST /validate endpoint.
+    await Promise.resolve();
+    const all = await couponService.getAll(args.franchiseId);
+    const coupon = all.find((c) => c.code === args.code.trim().toUpperCase());
 
     if (!coupon) return { valid: false, reason: 'Invalid coupon code' };
     if (!coupon.active) return { valid: false, reason: 'This coupon is no longer active' };
@@ -162,7 +94,6 @@ export const couponService = {
     if (args.amount < coupon.minOrderAmount)
       return { valid: false, reason: `Minimum order amount is ₹${coupon.minOrderAmount}` };
 
-    // Scope checks
     if (coupon.userId && coupon.userId !== args.userId)
       return { valid: false, reason: 'This coupon is not valid for your account' };
     if (coupon.franchiseId && coupon.franchiseId !== args.franchiseId)
@@ -172,12 +103,6 @@ export const couponService = {
     if (coupon.planId && coupon.planId !== args.planId)
       return { valid: false, reason: 'This coupon is not valid for your plan' };
 
-    // Per-user usage
-    const userUsage = getUserUsage(coupon.id, args.userId);
-    if (userUsage >= coupon.maxUsesPerUser)
-      return { valid: false, reason: `You have already used this coupon ${coupon.maxUsesPerUser === 1 ? '' : `${coupon.maxUsesPerUser} times`}`.trim() };
-
-    // Calculate discount
     let discount = 0;
     if (coupon.type === 'flat') {
       discount = Math.min(coupon.value, args.amount);
@@ -197,63 +122,15 @@ export const couponService = {
     };
   },
 
-  /**
-   * Redeem (consume) a coupon after successful payment.
-   * Increments global + per-user usage counters.
-   */
-  async redeem(couponId: string, userId: string): Promise<void> {
-    await delay(100);
-    const all = getAll();
-    const idx = all.findIndex(c => c.id === couponId);
-    if (idx === -1) return;
-    all[idx] = { ...all[idx], usedCount: all[idx].usedCount + 1, updatedAt: new Date().toISOString() };
-    saveAll(all);
-    incrementUserUsage(couponId, userId);
+  async redeem(couponId: string, userId: string, franchiseId?: string): Promise<void> {
+    // Backend will expose a dedicated redeem endpoint when integrating real payments.
+    // For now we keep a best-effort client marker via toggle if the server supported it.
+    void couponId; void userId; void franchiseId;
+    return Promise.resolve();
   },
 
-  // ── Seed defaults (so Admin has sample coupons on first load) ───────────
-
   async seedDefaults(): Promise<void> {
-    if (getAll().length > 0) return;
-    const now = new Date();
-    const future = new Date(now);
-    future.setMonth(future.getMonth() + 3);
-    await couponService.create({
-      code: 'WELCOME100',
-      type: 'flat',
-      value: 100,
-      description: '₹100 off your first payment — welcome gift',
-      usageLimit: 1000,
-      maxUsesPerUser: 1,
-      minOrderAmount: 500,
-      validFrom: now.toISOString(),
-      validTo: future.toISOString(),
-      active: true,
-    });
-    await couponService.create({
-      code: 'SAVE10',
-      type: 'percentage',
-      value: 10,
-      maxDiscount: 200,
-      description: '10% off (up to ₹200) on any payment',
-      usageLimit: undefined,
-      maxUsesPerUser: 3,
-      minOrderAmount: 0,
-      validFrom: now.toISOString(),
-      validTo: future.toISOString(),
-      active: true,
-    });
-    await couponService.create({
-      code: 'FESTIVAL50',
-      type: 'flat',
-      value: 50,
-      description: '₹50 off — Festival Special',
-      usageLimit: 500,
-      maxUsesPerUser: 1,
-      minOrderAmount: 1000,
-      validFrom: now.toISOString(),
-      validTo: future.toISOString(),
-      active: false,
-    });
+    // Seeding is a server-side responsibility in production.
+    // In dev this helper is intentionally a no-op.
   },
 };

@@ -10,6 +10,7 @@ import { authService } from '@/services/auth.service';
 interface AuthState {
   user: AuthUser | null;
   status: 'idle' | 'loading' | 'success' | 'error';
+  initialized: boolean;
   error?: string;
 }
 
@@ -23,14 +24,15 @@ interface AuthActions {
 export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
   user: null,
   status: 'idle',
+  initialized: false,
 
   initSession: async () => {
     set({ status: 'loading' });
     try {
       const user = await authService.getSession();
-      set({ user, status: 'success' });
+      set({ user, status: 'success', initialized: true });
     } catch {
-      set({ status: 'error', error: 'Failed to restore session' });
+      set({ status: 'error', initialized: true, error: 'Failed to restore session' });
     }
   },
 
@@ -38,7 +40,7 @@ export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
     set({ status: 'loading', error: undefined });
     try {
       const user = await authService.login(role, credentials);
-      set({ user, status: 'success' });
+      set({ user, status: 'success', initialized: true });
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : 'Login failed' });
       throw e;
@@ -51,6 +53,6 @@ export const useAuthStore = create<AuthState & AuthActions>()((set) => ({
 
   logout: async () => {
     await authService.logout();
-    set({ user: null, status: 'idle' });
+    set({ user: null, status: 'idle', initialized: true });
   },
 }));

@@ -1,8 +1,9 @@
 // =============================================================================
 // AdminPrizes — platform-wide prize management
 // =============================================================================
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Gift, Plus, Search, Sparkles, Building2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { MotionCard } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -15,31 +16,27 @@ import type { Prize, Franchise } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { motion } from 'framer-motion';
 
+interface PrizesData { prizes: Prize[]; franchises: Franchise[]; }
+
 export default function AdminPrizes() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [prizes, setPrizes] = useState<Prize[]>([]);
-  const [franchises, setFranchises] = useState<Franchise[]>([]);
   const [search, setSearch] = useState('');
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
+  const { data, isLoading: loading, error: queryError, refetch: load } = useQuery({
+    queryKey: ['adminPrizes'],
+    queryFn: async (): Promise<PrizesData> => {
       const [p, f] = await Promise.all([
         prizeService.getAllPrizes(),
         franchiseService.getFranchises(),
       ]);
-      setPrizes(p);
-      setFranchises(f);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load prizes');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { prizes: p, franchises: f };
+    },
+    staleTime: 15_000,
+    retry: 2,
+  });
 
-  useEffect(() => { void load(); }, []);
+  const prizes = data?.prizes ?? [];
+  const franchises = data?.franchises ?? [];
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed to load prizes') : null;
 
   const filteredPrizes = prizes.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 

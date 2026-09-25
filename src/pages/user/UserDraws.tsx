@@ -1,7 +1,6 @@
 // =============================================================================
 // User Draws — Draw history and win tracking
 // =============================================================================
-import { useEffect, useState } from 'react';
 import { Trophy, ShieldCheck, Sparkles } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { SkeletonTable } from '@/components/ui/Skeleton';
@@ -12,45 +11,55 @@ import { prizeService } from '@/services/prize.service';
 import { userService } from '@/services/user.service';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
-import type { Draw, Prize, FranchiseUser } from '@/types';
+import type { Draw, Prize } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export default function UserDraws() {
   const { user } = useAuthStore();
   const userId = user?.id ?? '';
   const franchiseId = user?.franchiseId ?? '';
+  const queryClient = useQueryClient();
 
-  const [draws, setDraws] = useState<Draw[]>([]);
-  const [prizes, setPrizes] = useState<Prize[]>([]);
-  const [members, setMembers] = useState<FranchiseUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: drawsRaw = [], isLoading: drawsLoading } = useQuery({
+    queryKey: ['user', 'draws', userId],
+    queryFn: () => drawService.getFranchiseDraws(franchiseId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!franchiseId,
+    refetchInterval: 60_000,
+  });
+  const draws = drawsRaw.filter((draw: Draw) => draw.status === 'completed');
 
-  useEffect(() => {
-    if (!userId) return;
-    (async () => {
-      setLoading(true); setError(null);
-      try {
-        const [d, p, u] = await Promise.all([
-          drawService.getFranchiseDraws(franchiseId),
-          prizeService.getFranchisePrizes(franchiseId),
-          userService.getFranchiseUsers(franchiseId),
-        ]);
-        // Only show completed draws to users
-        setDraws(d.filter(draw => draw.status === 'completed'));
-        setPrizes(p);
-        setMembers(u);
-      } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
-      finally { setLoading(false); }
-    })();
-  }, [userId, franchiseId]);
+  const { data: prizes = [], isLoading: prizesLoading } = useQuery({
+    queryKey: ['user', 'prizes', franchiseId],
+    queryFn: () => prizeService.getFranchisePrizes(franchiseId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!franchiseId,
+  });
+
+  const { data: members = [], isLoading: membersLoading } = useQuery({
+    queryKey: ['user', 'members', franchiseId],
+    queryFn: () => userService.getFranchiseUsers(franchiseId),
+    staleTime: 15_000,
+    retry: 2,
+    enabled: !!franchiseId,
+  });
+
+  const loading = drawsLoading || prizesLoading || membersLoading;
+  const error = null;
 
   // Compute + paginate before early returns to keep hook order stable.
   const sorted = [...draws].sort((a, b) => b.executedAt!.localeCompare(a.executedAt!));
   const { page, setPage, pageItems, pageCount, total, range } = usePagination(sorted, 10);
 
   if (loading) return <SkeletonTable />;
-  if (error) return <ErrorState description={error} />;
+  if (error) return <ErrorState description={error} onRetry={() => {
+    queryClient.invalidateQueries({ queryKey: ['user', 'draws', userId] });
+    queryClient.invalidateQueries({ queryKey: ['user', 'prizes', franchiseId] });
+    queryClient.invalidateQueries({ queryKey: ['user', 'members', franchiseId] });
+  }} />;
 
   const prizeMap = new Map(prizes.map(p => [p.id, p]));
   const memberMap = new Map(members.map(m => [m.id, m]));

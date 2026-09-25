@@ -3,8 +3,9 @@
 // Search (plan name) + franchise + status filters. Collapsible franchise
 // sections; mobile cards, desktop tables.
 // =============================================================================
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { SkeletonTable } from '@/components/ui/Skeleton';
@@ -21,25 +22,26 @@ const STATUS_VARIANT: Record<Plan['status'], 'success' | 'warning' | 'default' |
   active: 'success', draft: 'warning', completed: 'default', archived: 'danger',
 };
 
-export default function AdminPlans() {
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [franchises, setFranchises] = useState<Franchise[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface PlansData { plans: Plan[]; franchises: Franchise[]; }
 
+export default function AdminPlans() {
   const [search, setSearch] = useState('');
   const [franchiseFilter, setFranchiseFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const load = async () => {
-    setLoading(true); setError(null);
-    try {
+  const { data, isLoading: loading, error: queryError, refetch: load } = useQuery({
+    queryKey: ['adminPlans'],
+    queryFn: async (): Promise<PlansData> => {
       const [p, f] = await Promise.all([planService.getAllPlans(), franchiseService.getFranchises()]);
-      setPlans(p); setFranchises(f);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, []);
+      return { plans: p, franchises: f };
+    },
+    staleTime: 15_000,
+    retry: 2,
+  });
+
+  const plans = data?.plans ?? [];
+  const franchises = data?.franchises ?? [];
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed to load') : null;
 
   const q = search.trim().toLowerCase();
   const filtered = useMemo(() => plans.filter(p => {

@@ -4,11 +4,12 @@
 // Replaces the old flat table. Fully responsive (1 → 2 → 3 columns).
 // All data via services (mock now, backend-ready).
 // =============================================================================
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, Building2, Users, Layers, FileText, Pencil, Power, ExternalLink,
 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -26,26 +27,21 @@ import type { Franchise } from '@/types';
 import { cn, formatDate } from '@/lib/utils';
 
 interface FranchiseStats { members: number; groups: number; plans: number; }
+interface LoadedData { franchises: Franchise[]; stats: Record<string, FranchiseStats>; }
 
 export default function AdminFranchises() {
   const toast = useToast();
-
-  const [franchises, setFranchises] = useState<Franchise[]>([]);
-  const [stats, setStats] = useState<Record<string, FranchiseStats>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Franchise | null>(null);
-  const [toggling, setToggling] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true); setError(null);
-    try {
-      // Load franchises + cross-tenant data, then derive per-franchise counts.
+  const { data, isLoading: loading, error: queryError, refetch: load } = useQuery({
+    queryKey: ['adminFranchises'],
+    queryFn: async (): Promise<LoadedData> => {
       const [f, users, groups, plans] = await Promise.all([
         franchiseService.getFranchises(),
         userService.getAllUsers(),
@@ -57,32 +53,90 @@ export default function AdminFranchises() {
       for (const u of users) if (s[u.franchiseId]) s[u.franchiseId].members++;
       for (const g of groups) if (s[g.franchiseId]) s[g.franchiseId].groups++;
       for (const p of plans) if (s[p.franchiseId]) s[p.franchiseId].plans++;
-      setFranchises(f);
-      setStats(s);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, []);
+      return { franchises: f, stats: s };
+    },
+    staleTime: 15_000,
+    retry: 2,
+  });
+
+  const franchises = data?.franchises ?? [];
+  const stats = data?.stats ?? {};
+  const error = queryError ? (queryError instanceof Error ? queryError.message : 'Failed to load') : null;
 
   const openCreate = () => { setEditing(null); setEditorOpen(true); };
   const openEdit = (f: Franchise) => { setEditing(f); setEditorOpen(true); };
 
+  const saveMutation = useMutation({
+    mutationFn: (args: { franchise: Franchise; mode: 'create' | 'edit' }) => {
+      return Promise.resolve(args);
+    },
+    onMutate: async ({ franchise, mode }) => {
+      await queryClient.cancelQueries({ queryKey: ['adminFranchises'] });
+      const prev = queryClient.getQueryData<LoadedData>(['adminFranchises']);
+      if (prev) {
+        const nextFranchises = mode === 'create'
+          ? [...prev.franchises, franchise]
+          : prev.franchises.map(x => x.id === franchise.id ? franchise : x);
+        const nextStats = mode === 'create'
+          ? { ...prev.stats, [franchise.id]: { members: 0, groups: 0, plans: 0 } }
+          : prev.stats;
+        queryClient.setQueryData(['adminFranchises'], { franchises: nextFranchises, stats: nextStats });
+      }
+      return { prev };
+    },
+    onError: (_err, _args, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['adminFranchises'], ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminFranchises'] });
+    },
+  });
+
   const handleSaved = (f: Franchise, mode: 'create' | 'edit') => {
-    setFranchises(prev => mode === 'create' ? [...prev, f] : prev.map(x => x.id === f.id ? f : x));
-    if (mode === 'create') setStats(prev => ({ ...prev, [f.id]: { members: 0, groups: 0, plans: 0 } }));
+    saveMutation.mutate({ franchise: f, mode });
   };
 
-  const toggleStatus = async (f: Franchise) => {
-    setToggling(f.id);
-    try {
-      const updated = f.status === 'active'
-        ? await franchiseService.suspendFranchise(f.id)
-        : await franchiseService.activateFranchise(f.id);
-      setFranchises(prev => prev.map(x => x.id === f.id ? updated : x));
-      toast.success(updated.status === 'active' ? 'Franchise activated' : 'Franchise suspended', updated.name);
-    } catch (e) { toast.error('Failed to update status', e instanceof Error ? e.message : 'Unknown'); }
-    finally { setToggling(null); }
+  const toggleFranchiseMutation = useMutation({
+    mutationFn: (f: Franchise) =>
+      f.status === 'active'
+        ? franchiseService.suspendFranchise(f.id)
+        : franchiseService.activateFranchise(f.id),
+    onMutate: async (targetFranchise) => {
+      await queryClient.cancelQueries({ queryKey: ['adminFranchises'] });
+      const prev = queryClient.getQueryData<LoadedData>(['adminFranchises']);
+      if (prev) {
+        const flippedStatus = targetFranchise.status === 'active' ? 'suspended' : 'active';
+        queryClient.setQueryData(['adminFranchises'], {
+          franchises: prev.franchises.map(x =>
+            x.id === targetFranchise.id ? { ...x, status: flippedStatus as Franchise['status'] } : x
+          ),
+          stats: prev.stats,
+        });
+      }
+      return { prev, targetFranchise };
+    },
+    onError: (_err, _f, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['adminFranchises'], ctx.prev);
+      toast.error('Failed to update status', _err instanceof Error ? _err.message : 'Unknown');
+    },
+    onSuccess: (updated, originalFranchise) => {
+      toast.success(
+        updated.status === 'active' ? 'Franchise activated' : 'Franchise suspended',
+        originalFranchise.name
+      );
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminFranchises'] });
+    },
+  });
+
+  const toggleStatus = (f: Franchise) => {
+    toggleFranchiseMutation.mutate(f);
   };
+
+  const toggling = toggleFranchiseMutation.isPending
+    ? (toggleFranchiseMutation.variables as Franchise | undefined)?.id ?? null
+    : null;
 
   const q = search.trim().toLowerCase();
   const filtered = useMemo(() => franchises.filter(f => {

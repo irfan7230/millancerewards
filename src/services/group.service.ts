@@ -1,71 +1,40 @@
-// =============================================================================
-// Group Service
-// =============================================================================
 import type { Group, GroupType, NewGroupInput } from '@/types';
-import { persistence, KEYS } from '@/lib/persistence';
-import { GROUP_TYPES } from '@/data/generators';
+import { api } from '@/lib/api/client';
+import { useAuthStore } from '@/stores/authStore';
 
-function delay(ms = 300): Promise<void> { return new Promise(r => setTimeout(r, ms)); }
-function getAll(): Group[] { return persistence.get<Group[]>(KEYS.GROUPS) ?? []; }
-function saveAll(d: Group[]): void { persistence.set(KEYS.GROUPS, d); }
+function resolveFranchiseId(provided?: string): string {
+  if (provided) return provided;
+  const user = useAuthStore.getState().user;
+  if (user?.franchiseId) return user.franchiseId;
+  throw new Error('Franchise context unavailable: pass franchiseId explicitly or log in.');
+}
 
 export const groupService = {
-  getGroupTypes(): GroupType[] { return GROUP_TYPES; },
+  async getGroupTypes(): Promise<GroupType[]> {
+    return api.get<GroupType[]>('/core/group-types');
+  },
 
   async getFranchiseGroups(franchiseId: string): Promise<Group[]> {
-    await delay();
-    return getAll().filter(g => g.franchiseId === franchiseId);
+    return api.get<Group[]>(`/core/${resolveFranchiseId(franchiseId)}/groups`);
   },
 
   async getAllGroups(): Promise<Group[]> {
-    await delay();
-    return getAll();
+    return api.get<Group[]>('/admin/groups');
   },
 
-  async getGroup(id: string): Promise<Group> {
-    await delay(150);
-    const found = getAll().find(g => g.id === id);
-    if (!found) throw new Error(`Group ${id} not found`);
-    return found;
+  async getGroup(id: string, franchiseId?: string): Promise<Group> {
+    return api.get<Group>(`/core/${resolveFranchiseId(franchiseId)}/groups/${id}`);
   },
 
   async createGroup(input: NewGroupInput): Promise<Group> {
-    await delay(350);
-    const all = getAll();
-    const groupType = GROUP_TYPES.find(t => t.id === input.groupTypeId);
-    if (!groupType) throw new Error(`GroupType ${input.groupTypeId} not found`);
-    const existing = all.filter(g => g.franchiseId === input.franchiseId && g.groupTypeId === input.groupTypeId);
-    const totalMembers = existing.reduce((sum, g) => sum + g.memberCount, 0);
-    if (totalMembers >= groupType.capacity) {
-      throw new Error(`Franchise has reached full capacity (${groupType.capacity}) for ${groupType.name}`);
-    }
-    const newGroup: Group = {
-      id: `grp-${crypto.randomUUID()}`,
-      franchiseId: input.franchiseId,
-      groupTypeId: input.groupTypeId,
-      name: input.name,
-      memberCount: 0,
-      createdAt: new Date().toISOString(),
-    };
-    saveAll([...all, newGroup]);
-    return newGroup;
+    return api.post<Group>(`/core/${input.franchiseId}/groups`, input);
   },
 
-  async incrementMemberCount(groupId: string): Promise<void> {
-    const all = getAll();
-    const idx = all.findIndex(g => g.id === groupId);
-    if (idx !== -1) {
-      all[idx] = { ...all[idx], memberCount: all[idx].memberCount + 1 };
-      saveAll(all);
-    }
+  async incrementMemberCount(_groupId: string): Promise<void> {
+    // Backend updates member counts transactionally as part of user create/delete flows.
   },
 
-  async decrementMemberCount(groupId: string): Promise<void> {
-    const all = getAll();
-    const idx = all.findIndex(g => g.id === groupId);
-    if (idx !== -1) {
-      all[idx] = { ...all[idx], memberCount: Math.max(0, all[idx].memberCount - 1) };
-      saveAll(all);
-    }
+  async decrementMemberCount(_groupId: string): Promise<void> {
+    // Backend updates member counts transactionally as part of user create/delete flows.
   },
 };

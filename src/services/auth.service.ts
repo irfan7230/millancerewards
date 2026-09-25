@@ -1,35 +1,39 @@
 // =============================================================================
-// Auth Service — mock implementation
+// Auth Service — real backend implementation
 // FUTURE-BACKEND-INTEGRATION.md §AuthService interface
 //
-// SECURITY NOTE: This is a UI-layer mock. Route guards and role checks here
-// are conveniences, NOT a security boundary. A real auth server must be added
-// before any production deployment. Never store real passwords here.
+// Talks to POST /auth/login, POST /auth/logout, GET /auth/session.
+// The backend issues a short-lived JWT access token (kept in localStorage via
+// the token store) and a long-lived httpOnly refresh cookie (managed by the
+// browser). The exported signatures and the returned AuthUser shape are
+// unchanged, so authStore, route guards, and pages need no modification.
 // =============================================================================
 
 import type { AuthUser, Role } from '@/types';
-import { persistence, KEYS } from '@/lib/persistence';
+import { api } from '@/lib/api/client';
+import { setToken, clearToken, getToken } from '@/lib/api/token';
 
-// Demo accounts per DEVELOPMENT.md §Demo accounts
+// Demo accounts retained for the login screen's quick-fill buttons. These are
+// display hints only; real credentials are verified by the backend.
 export const DEMO_ACCOUNTS: Record<Role, AuthUser> = {
   super_admin: {
     id: 'demo-admin-001',
     role: 'super_admin',
     name: 'Demo Admin',
-    email: 'admin@millance.demo',
+    email: 'admin@millance.com',
   },
   franchise: {
     id: 'demo-fran-001',
     role: 'franchise',
     name: 'Demo Franchise Manager',
-    email: 'franchise@millance.demo',
+    email: 'franchise@millance.com',
     franchiseId: 'fran-0001',
   },
   user: {
     id: 'usr-0001',
     role: 'user',
     name: 'Demo User',
-    email: 'user@millance.demo',
+    email: 'user@millance.com',
     franchiseId: 'fran-0001',
   },
 };
@@ -40,31 +44,40 @@ export interface AuthService {
   getSession(): Promise<AuthUser | null>;
 }
 
-function simulateDelay(ms = 400): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+interface LoginResponse {
+  user: AuthUser;
+  accessToken: string;
 }
 
 export const authService: AuthService = {
   async login(role, credentials): Promise<AuthUser> {
-    await simulateDelay(500);
-    // Map email to demo account — no real password check
-    const demo = DEMO_ACCOUNTS[role];
-    if (!demo) throw new Error(`Unknown role: ${role}`);
-    // Accept demo email or any non-empty credentials for that role
-    const user: AuthUser = {
-      ...demo,
-      email: credentials.email || demo.email,
-    };
-    persistence.set<AuthUser>(KEYS.AUTH_SESSION, user);
-    return user;
+    const res = await api.post<LoginResponse>(
+      '/auth/login',
+      { role, email: credentials.email, password: credentials.password },
+      { skipAuth: true },
+    );
+    setToken(res.accessToken);
+    return res.user;
   },
 
   async logout(): Promise<void> {
-    await simulateDelay(200);
-    persistence.remove(KEYS.AUTH_SESSION);
+    try {
+      await api.post<null>('/auth/logout');
+    } finally {
+      // Always clear the local token even if the network call fails.
+      clearToken();
+    }
   },
 
   async getSession(): Promise<AuthUser | null> {
-    return persistence.get<AuthUser>(KEYS.AUTH_SESSION) ?? null;
+    // No stored access token means no session to restore.
+    if (!getToken()) return null;
+    try {
+      return await api.get<AuthUser>('/auth/session');
+    } catch {
+      // Token invalid/expired and refresh failed — treat as logged out.
+      clearToken();
+      return null;
+    }
   },
 };

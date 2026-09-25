@@ -1,49 +1,39 @@
-// =============================================================================
-// Prize Service
-// =============================================================================
 import type { Prize } from '@/types';
-import { persistence, KEYS } from '@/lib/persistence';
+import { api } from '@/lib/api/client';
+import { useAuthStore } from '@/stores/authStore';
 
-function delay(ms = 200): Promise<void> { return new Promise(r => setTimeout(r, ms)); }
-function getAll(): Prize[] { return persistence.get<Prize[]>(KEYS.PRIZES) ?? []; }
-function saveAll(d: Prize[]): void { persistence.set(KEYS.PRIZES, d); }
+function resolveFranchiseId(provided?: string): string {
+  if (provided) return provided;
+  const user = useAuthStore.getState().user;
+  if (user?.franchiseId) return user.franchiseId;
+  throw new Error('Franchise context unavailable: pass franchiseId explicitly or log in.');
+}
 
 export const prizeService = {
   async getFranchisePrizes(franchiseId: string): Promise<Prize[]> {
-    await delay();
-    return getAll().filter(p => p.franchiseId === franchiseId);
+    return api.get<Prize[]>(`/core/${resolveFranchiseId(franchiseId)}/prizes`);
   },
 
   async getAllPrizes(): Promise<Prize[]> {
-    await delay();
-    return getAll();
+    return api.get<Prize[]>('/admin/prizes');
   },
 
-  async getPrize(id: string): Promise<Prize> {
-    const found = getAll().find(p => p.id === id);
-    if (!found) throw new Error(`Prize ${id} not found`);
-    return found;
+  async getPrize(id: string, franchiseId?: string): Promise<Prize> {
+    return api.get<Prize>(`/core/${resolveFranchiseId(franchiseId)}/prizes/${id}`);
   },
 
   async createPrize(prize: Omit<Prize, 'id'>): Promise<Prize> {
-    await delay(300);
-    const newPrize: Prize = { ...prize, id: `prz-${crypto.randomUUID()}` };
-    saveAll([...getAll(), newPrize]);
-    return newPrize;
+    const franchiseId = (prize as Prize & { franchiseId?: string }).franchiseId;
+    if (!franchiseId) throw new Error('Cannot create prize: missing franchiseId');
+    return api.post<Prize>(`/core/${resolveFranchiseId(franchiseId)}/prizes`, prize);
   },
 
-  async updatePrize(id: string, patch: Partial<Prize>): Promise<Prize> {
-    await delay(200);
-    const all = getAll();
-    const idx = all.findIndex(p => p.id === id);
-    if (idx === -1) throw new Error(`Prize ${id} not found`);
-    all[idx] = { ...all[idx], ...patch };
-    saveAll(all);
-    return all[idx];
+  async updatePrize(id: string, patch: Partial<Prize>, franchiseId?: string): Promise<Prize> {
+    const fid = resolveFranchiseId(franchiseId ?? patch.franchiseId);
+    return api.patch<Prize>(`/core/${fid}/prizes/${id}`, patch);
   },
 
-  async deletePrize(id: string): Promise<void> {
-    await delay(200);
-    saveAll(getAll().filter(p => p.id !== id));
+  async deletePrize(id: string, franchiseId?: string): Promise<void> {
+    await api.del<void>(`/core/${resolveFranchiseId(franchiseId)}/prizes/${id}`);
   },
 };

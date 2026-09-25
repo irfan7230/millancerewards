@@ -1,12 +1,5 @@
-// =============================================================================
-// Settings Service — admin-configurable platform settings.
-// Backed by the persistence adapter (localStorage now). Backend-ready: the same
-// getSettings/updateSettings signatures map onto a future /api/settings endpoint.
-// =============================================================================
 import type { PlatformSettings } from '@/types';
-import { persistence, KEYS } from '@/lib/persistence';
-
-function delay(ms = 250): Promise<void> { return new Promise(r => setTimeout(r, ms)); }
+import { api } from '@/lib/api/client';
 
 const DEFAULT_SETTINGS: PlatformSettings = {
   platformName: 'Millance',
@@ -33,24 +26,20 @@ const DEFAULT_SETTINGS: PlatformSettings = {
 
 export const settingsService = {
   async getSettings(): Promise<PlatformSettings> {
-    await delay();
-    const stored = persistence.get<Partial<PlatformSettings>>(KEYS.SETTINGS);
-    // Merge with defaults so new fields added later still resolve.
-    return { ...DEFAULT_SETTINGS, ...(stored ?? {}) };
+    try {
+      const stored = await api.get<Partial<PlatformSettings>>('/core/settings');
+      return { ...DEFAULT_SETTINGS, ...(stored ?? {}) };
+    } catch {
+      return { ...DEFAULT_SETTINGS };
+    }
   },
 
   async updateSettings(patch: Partial<PlatformSettings>): Promise<PlatformSettings> {
-    await delay(400);
-    const current = await settingsService.getSettings();
-    const next: PlatformSettings = { ...current, ...patch, updatedAt: new Date().toISOString() };
-    persistence.set(KEYS.SETTINGS, next);
-    return next;
+    const stored = await api.patch<PlatformSettings>('/core/settings', patch);
+    return { ...DEFAULT_SETTINGS, ...(stored ?? {}) };
   },
 
   async resetSettings(): Promise<PlatformSettings> {
-    await delay(300);
-    const next = { ...DEFAULT_SETTINGS, updatedAt: new Date().toISOString() };
-    persistence.set(KEYS.SETTINGS, next);
-    return next;
+    return settingsService.updateSettings({ ...DEFAULT_SETTINGS });
   },
 };

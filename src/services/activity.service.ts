@@ -1,14 +1,12 @@
-// =============================================================================
-// Activity Log Service
-// =============================================================================
 import type { ActivityLogEntry, Role } from '@/types';
-import { persistence, KEYS } from '@/lib/persistence';
+import { api } from '@/lib/api/client';
+import { useAuthStore } from '@/stores/authStore';
 
-function getAll(): ActivityLogEntry[] {
-  return persistence.get<ActivityLogEntry[]>(KEYS.ACTIVITY_LOG) ?? [];
-}
-function saveAll(d: ActivityLogEntry[]): void {
-  persistence.set(KEYS.ACTIVITY_LOG, d);
+function resolveFranchiseId(provided?: string): string {
+  if (provided) return provided;
+  const user = useAuthStore.getState().user;
+  if (user?.franchiseId) return user.franchiseId;
+  throw new Error('Franchise context unavailable: pass franchiseId explicitly or log in.');
 }
 
 interface LogInput {
@@ -21,23 +19,22 @@ interface LogInput {
 }
 
 export const activityService = {
-  async log(input: LogInput): Promise<ActivityLogEntry> {
-    const entry: ActivityLogEntry = {
-      id: `act-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      ...input,
-      createdAt: new Date().toISOString(),
-    };
-    saveAll([...getAll(), entry]);
-    return entry;
+  async log(_input: LogInput): Promise<ActivityLogEntry> {
+    throw new Error(
+      'Client-side activity writes are not supported. Activity logs are emitted by the backend automatically as part of transactional workflows (draws, redemptions, payments, etc.).',
+    );
   },
 
   async getFranchiseLog(franchiseId: string): Promise<ActivityLogEntry[]> {
-    return getAll()
-      .filter(e => e.franchiseId === franchiseId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const logs = await api.get<ActivityLogEntry[]>(`/core/${resolveFranchiseId(franchiseId)}/activity`);
+    return [...logs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 
   async getAllLog(): Promise<ActivityLogEntry[]> {
-    return getAll().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const user = useAuthStore.getState().user;
+    if (user?.franchiseId) {
+      return activityService.getFranchiseLog(user.franchiseId);
+    }
+    return [];
   },
 };

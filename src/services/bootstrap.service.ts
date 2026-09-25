@@ -1,14 +1,18 @@
 // =============================================================================
 // Data Bootstrap Service
-// Checks if seed data exists in persistence; if not, generates and stores it.
+// In development: populates localStorage with seed demo data so UI screens have
+// shape when the backend is not running.
+// In production: no-op. The backend is the sole source of truth; services read
+// directly from the REST API and the persistence layer is not consulted.
 // Called once at app startup (in AppProviders).
-// In production this is replaced by API calls that hydrate the store on login.
 // =============================================================================
 
 import { persistence, KEYS } from '@/lib/persistence';
 import { generateSeedData } from '@/data/generators';
 
 export function bootstrapData(): void {
+  if (!import.meta.env.DEV) return;
+
   const alreadySeeded = persistence.get<boolean>(KEYS.SEEDED);
   if (alreadySeeded) return;
 

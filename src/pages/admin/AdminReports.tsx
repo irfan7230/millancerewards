@@ -3,7 +3,7 @@
 // UI/UX only — existing data flow and business logic preserved
 // =============================================================================
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
 import {
   BarChart3,
@@ -11,18 +11,17 @@ import {
   Trophy,
   Percent,
   TrendingUp,
+  Building2,
+  Users,
+  Wallet,
 } from 'lucide-react';
 
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 
 import { ErrorState, PageLoader } from '@/components/ui/States';
 
-import { franchiseService } from '@/services/franchise.service';
-import { userService } from '@/services/user.service';
-import { drawService } from '@/services/draw.service';
-import { paymentService } from '@/services/payment.service';
-import { vaultService } from '@/services/vault.service';
-import type { Payment } from '@/types';
+import { useQuery } from '@tanstack/react-query';
+import { reportsService } from '@/services/reports.service';
 
 import {
   BarChart,
@@ -32,9 +31,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   Legend,
 } from 'recharts';
 
@@ -43,31 +39,6 @@ import { formatCurrency } from '@/lib/utils';
 // =============================================================================
 // Types
 // =============================================================================
-
-interface FranchiseStat {
-  name: string;
-  members: number;
-  draws: number;
-  paidPayments: number;
-}
-
-interface PaymentBreakdown {
-  name: string;
-  value: number;
-  color: string;
-}
-
-interface ReportsData {
-  fStats: FranchiseStat[];
-  paymentBreakdown: PaymentBreakdown[];
-  totalRevenue: number;
-  totalVaultBalance: number;
-  totalWinners: number;
-  franchises: unknown[];
-  users: unknown[];
-  draws: unknown[];
-  payments: Payment[];
-}
 
 // =============================================================================
 // Premium responsive stat card
@@ -185,125 +156,39 @@ function ChartSection({ title, children }: ChartSectionProps) {
 // =============================================================================
 
 export default function AdminReports() {
-  const [data, setData] = useState<ReportsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery({
+    queryKey: ['reports', 'dashboard'],
+    queryFn: reportsService.getDashboard,
+    refetchInterval: 30_000,
+    retry: 2,
+  });
+  const { data: perfRows, isLoading: perfLoading } = useQuery({
+    queryKey: ['reports', 'franchisePerformance'],
+    queryFn: reportsService.getFranchisePerformance,
+    refetchInterval: 30_000,
+  });
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-
-      try {
-        const [
-          franchises,
-          users,
-          draws,
-          payments,
-          vaults,
-        ] = await Promise.all([
-          franchiseService.getFranchises(),
-          userService.getAllUsers(),
-          drawService.getAllDraws(),
-          paymentService.getAllPayments(),
-          vaultService.getAllVaults(),
-        ]);
-
-        // ---------------------------------------------------------------------
-        // Build per-franchise stats
-        // Existing business logic preserved
-        // ---------------------------------------------------------------------
-
-        const fStats = franchises.map((f) => ({
-          name: f.name.split(' ')[0],
-          members: users.filter((u) => u.franchiseId === f.id).length,
-          draws: draws.filter(
-            (d) => d.franchiseId === f.id && d.status === 'completed',
-          ).length,
-          paidPayments: payments.filter(
-            (p) => p.franchiseId === f.id && p.status === 'Paid',
-          ).length,
-        }));
-
-        // ---------------------------------------------------------------------
-        // Payment status breakdown
-        // Existing business logic preserved
-        // ---------------------------------------------------------------------
-
-        const paymentBreakdown = [
-          {
-            name: 'Paid',
-            value: payments.filter((p) => p.status === 'Paid').length,
-            color: '#22c55e',
-          },
-          {
-            name: 'Pending',
-            value: payments.filter((p) => p.status === 'Pending').length,
-            color: '#f59e0b',
-          },
-          {
-            name: 'Failed',
-            value: payments.filter((p) => p.status === 'Failed').length,
-            color: '#ef4444',
-          },
-          {
-            name: 'Skipped',
-            value: payments.filter((p) => p.status === 'Skipped').length,
-            color: '#9ca3af',
-          },
-        ].filter((d) => d.value > 0);
-
-        const totalRevenue = payments
-          .filter((p) => p.status === 'Paid')
-          .reduce((s, p) => s + p.amount, 0);
-
-        const totalVaultBalance = vaults.reduce(
-          (s, v) => s + v.balance,
-          0,
-        );
-
-        const totalWinners = draws.flatMap((d) => d.winners).length;
-
-        setData({
-          fStats,
-          paymentBreakdown,
-          totalRevenue,
-          totalVaultBalance,
-          totalWinners,
-          franchises,
-          users,
-          draws,
-          payments,
-        });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const loading = statsLoading || perfLoading;
+  const error = statsError;
 
   if (loading) {
     return <PageLoader label="Building reports…" />;
   }
 
-  if (error || !data) {
-    return <ErrorState description={error ?? 'No data'} />;
+  if (error || !stats) {
+    return <ErrorState description={error?.message ?? 'No data'} />;
   }
 
-  const {
-    fStats,
-    paymentBreakdown,
-    totalRevenue,
-    totalVaultBalance,
-    totalWinners,
-    payments,
-  } = data;
+  const totalRevenue = stats.totalRevenue ?? 0;
+  const totalVaultBalance = stats.totalVaultBalance ?? 0;
+  const totalWinners = stats.totalWinners ?? 0;
+  const paymentRate = (stats.paymentRate as number) ?? 0;
 
-  const paymentRate = Math.round(
-    (payments.filter((p: Payment) => p.status === 'Paid').length /
-      Math.max(1, payments.length)) *
-      100,
-  );
+  const barData = (perfRows ?? []).map(row => ({
+    name: row.franchiseName.split(' ')[0],
+    members: row.totalMembers,
+    plans: row.totalPlans,
+  }));
 
   return (
     <div className="w-full min-w-0 space-y-6 pb-8 sm:space-y-7">
@@ -384,7 +269,7 @@ export default function AdminReports() {
       </section>
 
       {/* ================================================================== */}
-      {/* Analytics charts                                                    */}
+      {/* Analytics sections                                                  */}
       {/* Mobile: 1 column                                                   */}
       {/* Desktop: 2 columns                                                 */}
       {/* ================================================================== */}
@@ -399,130 +284,58 @@ export default function AdminReports() {
         "
       >
         {/* ================================================================ */}
-        {/* Members & Draws                                                  */}
+        {/* Members & Plans Bar Chart                                         */}
         {/* ================================================================ */}
 
-        <ChartSection title="Members & Draws by Franchise">
+        <ChartSection title="Members & Plans by Franchise">
           <div
             className="h-[280px] w-full min-w-0 sm:h-[320px]"
             role="img"
-            aria-label="Bar chart showing members and completed draws by franchise"
+            aria-label="Bar chart showing members and plans by franchise"
           >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={fStats}
-                margin={{
-                  top: 12,
-                  right: 8,
-                  bottom: 18,
-                  left: -8,
-                }}
-                barGap={6}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="#e5e7eb"
-                  vertical={false}
-                />
-
-                <XAxis
-                  dataKey="name"
-                  tick={{
-                    fontSize: 11,
-                    fill: '#64748b',
-                  }}
-                  tickLine={false}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                  interval={0}
-                  angle={fStats.length > 4 ? -25 : 0}
-                  textAnchor={fStats.length > 4 ? 'end' : 'middle'}
-                />
-
-                <YAxis
-                  tick={{
-                    fontSize: 11,
-                    fill: '#64748b',
-                  }}
-                  tickLine={false}
-                  axisLine={false}
-                  allowDecimals={false}
-                />
-
-                <Tooltip
-                  cursor={{ fill: 'rgba(99,102,241,0.04)' }}
-                  contentStyle={{
-                    borderRadius: 12,
-                    border: '1px solid #e5e7eb',
-                    boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
-                    fontSize: 12,
-                  }}
-                />
-
-                <Legend
-                  wrapperStyle={{
-                    fontSize: 12,
-                    paddingTop: 8,
-                  }}
-                />
-
-                <Bar
-                  dataKey="members"
-                  name="Members"
-                  fill="#3b82f6"
-                  radius={[5, 5, 0, 0]}
-                  maxBarSize={34}
-                />
-
-                <Bar
-                  dataKey="draws"
-                  name="Draws"
-                  fill="#8b5cf6"
-                  radius={[5, 5, 0, 0]}
-                  maxBarSize={34}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartSection>
-
-        {/* ================================================================ */}
-        {/* Payment Distribution                                             */}
-        {/* ================================================================ */}
-
-        <ChartSection title="Payment Status Distribution">
-          <div
-            className="h-[280px] w-full min-w-0 sm:h-[320px]"
-            role="img"
-            aria-label="Pie chart showing payment status distribution"
-          >
-            {paymentBreakdown.length > 0 ? (
+            {barData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={paymentBreakdown}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="43%"
-                    outerRadius="58%"
-                    innerRadius="28%"
-                    paddingAngle={2}
-                    label={({ name, percent }: any) =>
-                      `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                    }
-                    labelLine={false}
-                  >
-                    {paymentBreakdown.map((entry) => (
-                      <Cell
-                        key={entry.name}
-                        fill={entry.color}
-                        stroke="white"
-                        strokeWidth={2}
-                      />
-                    ))}
-                  </Pie>
+                <BarChart
+                  data={barData}
+                  margin={{
+                    top: 12,
+                    right: 8,
+                    bottom: 18,
+                    left: -8,
+                  }}
+                  barGap={6}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#e5e7eb"
+                    vertical={false}
+                  />
+
+                  <XAxis
+                    dataKey="name"
+                    tick={{
+                      fontSize: 11,
+                      fill: '#64748b',
+                    }}
+                    tickLine={false}
+                    axisLine={{ stroke: '#e5e7eb' }}
+                    interval={0}
+                    angle={barData.length > 4 ? -25 : 0}
+                    textAnchor={barData.length > 4 ? 'end' : 'middle'}
+                  />
+
+                  <YAxis
+                    tick={{
+                      fontSize: 11,
+                      fill: '#64748b',
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                  />
 
                   <Tooltip
+                    cursor={{ fill: 'rgba(99,102,241,0.04)' }}
                     contentStyle={{
                       borderRadius: 12,
                       border: '1px solid #e5e7eb',
@@ -532,13 +345,28 @@ export default function AdminReports() {
                   />
 
                   <Legend
-                    verticalAlign="bottom"
-                    height={36}
                     wrapperStyle={{
                       fontSize: 12,
+                      paddingTop: 8,
                     }}
                   />
-                </PieChart>
+
+                  <Bar
+                    dataKey="members"
+                    name="Members"
+                    fill="#3b82f6"
+                    radius={[5, 5, 0, 0]}
+                    maxBarSize={34}
+                  />
+
+                  <Bar
+                    dataKey="plans"
+                    name="Plans"
+                    fill="#8b5cf6"
+                    radius={[5, 5, 0, 0]}
+                    maxBarSize={34}
+                  />
+                </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex h-full items-center justify-center">
@@ -551,11 +379,124 @@ export default function AdminReports() {
                   </div>
 
                   <p className="mt-3 text-sm font-medium text-neutral-700">
-                    No payment data
+                    No franchise data
                   </p>
 
                   <p className="mt-1 text-xs text-neutral-500">
-                    Payment status data will appear here when available.
+                    Franchise performance data will appear here when available.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </ChartSection>
+
+        {/* ================================================================ */}
+        {/* Franchise Performance Table                                       */}
+        {/* ================================================================ */}
+
+        <ChartSection title="Franchise Performance">
+          <div className="min-w-0" role="region" aria-label="Franchise performance table">
+            {(perfRows ?? []).length > 0 ? (
+              <div className="overflow-hidden rounded-xl border border-neutral-200">
+                <table className="min-w-full divide-y divide-neutral-200">
+                  <thead className="bg-neutral-50">
+                    <tr>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5" />
+                          Franchise
+                        </span>
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500"
+                      >
+                        <span className="flex items-center justify-end gap-1.5">
+                          <Users className="h-3.5 w-3.5" />
+                          Members
+                        </span>
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500"
+                      >
+                        <span className="flex items-center justify-end gap-1.5">
+                          <Trophy className="h-3.5 w-3.5" />
+                          Plans
+                        </span>
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500"
+                      >
+                        <span className="flex items-center justify-end gap-1.5">
+                          <Wallet className="h-3.5 w-3.5" />
+                          Revenue
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 bg-white">
+                    {(perfRows ?? []).map((row) => (
+                      <tr
+                        key={row.franchiseId}
+                        className="hover:bg-neutral-50/60 transition-colors"
+                      >
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 shrink-0 rounded-lg bg-gradient-to-br from-brand-100 to-brand-50 border border-brand-200/60 flex items-center justify-center text-brand-700 text-xs font-bold shadow-sm">
+                              {row.franchiseName.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-neutral-900 truncate max-w-[180px]">
+                                {row.franchiseName}
+                              </p>
+                              <p className="text-xs text-neutral-500 font-mono">
+                                #{row.franchiseId.slice(0, 8)}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <span className="text-sm font-semibold text-neutral-900">
+                            {row.totalMembers.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <span className="text-sm font-medium text-neutral-700">
+                            {row.totalPlans.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <span className="text-sm font-bold text-emerald-600">
+                            {formatCurrency(row.totalRevenue)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="flex h-[280px] sm:h-[320px] items-center justify-center">
+                <div className="text-center">
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-neutral-100 text-neutral-400">
+                    <Building2
+                      className="h-5 w-5"
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <p className="mt-3 text-sm font-medium text-neutral-700">
+                    No performance data
+                  </p>
+
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Franchise performance data will appear here when available.
                   </p>
                 </div>
               </div>
